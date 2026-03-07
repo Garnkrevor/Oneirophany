@@ -14,17 +14,26 @@
 
 'use strict';
 
-const fs = require('fs');
-const path = require('path');
+const fs     = require('fs');
+const path   = require('path');
+const crypto = require('crypto');
 
 const ROOT = path.join(__dirname, '..');
 const MERGE_CODE = fs.readFileSync(path.join(__dirname, 'merge_code_node.js'), 'utf-8');
 
-function uuid() {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
-    const r = (Math.random() * 16) | 0;
-    return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
-  });
+/**
+ * Deterministic UUID derived from a string seed via SHA-256.
+ * Rebuilds produce identical step2_workflow.json unless source changes.
+ */
+function deterministicUuid(seed) {
+  const h = crypto.createHash('sha256').update(seed).digest('hex');
+  return [
+    h.slice(0, 8),
+    h.slice(8, 12),
+    '4' + h.slice(13, 16),
+    ((parseInt(h[16], 16) & 0x3) | 0x8).toString(16) + h.slice(17, 20),
+    h.slice(20, 32)
+  ].join('-');
 }
 
 // ─── Node code templates ──────────────────────────────────────────────────────
@@ -220,65 +229,139 @@ let payload;
 try {
   payload = JSON.parse(cleaned);
 } catch (e) {
-  return [{
-    json: {
-      parse_error: true,
-      raw_response: rawText,
-      error_message: 'JSON parse failed: ' + e.message
-    }
-  }];
+  return [{ json: { parse_error: true, raw_response: rawText, error_message: 'JSON parse failed: ' + e.message } }];
 }
 
-// Structural validation
-if (!payload.updates || !Array.isArray(payload.updates)) {
-  return [{
-    json: {
-      parse_error: true,
-      raw_response: rawText,
-      error_message: 'updates array missing from payload'
-    }
-  }];
+// ── Enum sets — mirrors foundation_update_payload.schema.json ─────────────────
+const VALID_SECTIONS = new Set([
+  'project_core', 'world_foundation', 'story_engine',
+  'character_system', 'plot_frame', 'ending_design', 'author_preferences'
+]);
+
+const VALID_FIELDS = new Set([
+  'title', 'format', 'genre_primary', 'subgenre', 'premise', 'hook', 'audience', 'market_position',
+  'setting_type', 'time_period', 'primary_location', 'major_world_rules', 'power_structures',
+  'magic_or_power_system', 'cultures', 'world_conflicts', 'secrets',
+  'central_conflict', 'story_question', 'stakes', 'themes', 'hooks', 'pressure_points', 'reader_experience',
+  'protagonist_name', 'protagonist_role_summary', 'protagonist_external_goal',
+  'protagonist_internal_need', 'protagonist_wound', 'protagonist_flaw',
+  'protagonist_arc_direction', 'protagonist_voice_notes',
+  'antagonist_name', 'antagonist_nature', 'antagonist_role_summary',
+  'antagonist_motivation', 'antagonist_relationship_to_protagonist',
+  'relationship_map', 'factions',
+  'beginning_state', 'inciting_incident', 'first_turn', 'midpoint',
+  'darkest_moment', 'climax', 'resolution_shape', 'major_reveals', 'set_pieces',
+  'ending_summary', 'final_image', 'protagonist_final_state', 'relationship_end_states',
+  'world_state_after', 'required_payoffs', 'emotional_ending_feel',
+  'pov_preference', 'prose_register', 'chapter_length_target', 'tense_preference',
+  'explicit_inspirations', 'must_include', 'must_avoid', 'content_limits',
+  'trope_targets', 'trope_avoids', 'favorite_elements', 'non_negotiables',
+  'style_preferences', 'constraints'
+]);
+
+const VALID_STATUSES      = new Set(['confirmed', 'tentative', 'superseded']);
+const VALID_SOURCE_TYPES  = new Set(['chat', 'voice', 'notes', 'mixed']);
+const VALID_PRIORITIES    = new Set(['high', 'medium', 'low']);
+const VALID_NOTE_TYPES    = new Set(['must_include', 'must_avoid', 'style_preference', 'constraint', 'inspiration', 'nonnegotiable']);
+const VALID_NOTE_STATUSES = new Set(['confirmed', 'tentative']);
+const VALID_Q_SECTIONS    = new Set([...VALID_SECTIONS, 'general']);
+
+function fail(msg) {
+  return [{ json: { parse_error: true, raw_response: rawText, error_message: msg } }];
 }
 
+// ── round_info ────────────────────────────────────────────────────────────────
 if (!payload.round_info || typeof payload.round_info !== 'object') {
-  return [{
-    json: {
-      parse_error: true,
-      raw_response: rawText,
-      error_message: 'round_info object missing from payload'
-    }
-  }];
+  return fail('round_info object missing from payload');
+}
+if (!payload.round_info.round_label || typeof payload.round_info.round_label !== 'string') {
+  return fail('round_info.round_label missing or not a string');
+}
+if (!VALID_SOURCE_TYPES.has(payload.round_info.source_type)) {
+  return fail('round_info.source_type invalid: "' + payload.round_info.source_type +
+              '". Expected one of: ' + [...VALID_SOURCE_TYPES].join(', '));
+}
+if (!payload.round_info.handoff_date || !/^\\d{4}-\\d{2}-\\d{2}$/.test(payload.round_info.handoff_date)) {
+  return fail('round_info.handoff_date missing or not ISO date (YYYY-MM-DD): ' + payload.round_info.handoff_date);
 }
 
-const VALID_STATUSES = new Set(['confirmed', 'tentative', 'superseded']);
+// ── updates ───────────────────────────────────────────────────────────────────
+if (!payload.updates || !Array.isArray(payload.updates)) {
+  return fail('updates array missing from payload');
+}
 for (let i = 0; i < payload.updates.length; i++) {
   const u = payload.updates[i];
-  if (!u.section || !u.field) {
-    return [{
-      json: {
-        parse_error: true,
-        raw_response: rawText,
-        error_message: 'updates[' + i + '] missing section or field'
-      }
-    }];
+  if (!u.section || !VALID_SECTIONS.has(u.section)) {
+    return fail('updates[' + i + '] invalid section: "' + u.section + '"');
+  }
+  if (!u.field || !VALID_FIELDS.has(u.field)) {
+    return fail('updates[' + i + '] invalid field: "' + u.field + '"');
   }
   if (!VALID_STATUSES.has(u.status)) {
-    return [{
-      json: {
-        parse_error: true,
-        raw_response: rawText,
-        error_message: 'updates[' + i + '] has invalid status: ' + u.status
-      }
-    }];
+    return fail('updates[' + i + '] invalid status: "' + u.status + '"');
+  }
+  const v = u.value;
+  if (v !== null && typeof v !== 'string' && !Array.isArray(v)) {
+    return fail('updates[' + i + '].value must be string, array of strings, or null');
+  }
+  if (Array.isArray(v) && !v.every(el => typeof el === 'string')) {
+    return fail('updates[' + i + '].value array must contain only strings');
   }
 }
 
-// Fill optional arrays with defaults
+// ── open_questions ────────────────────────────────────────────────────────────
 if (!Array.isArray(payload.open_questions)) payload.open_questions = [];
+for (let i = 0; i < payload.open_questions.length; i++) {
+  const q = payload.open_questions[i];
+  if (!q.question || typeof q.question !== 'string') {
+    return fail('open_questions[' + i + '].question missing or not a string');
+  }
+  if (!q.section || !VALID_Q_SECTIONS.has(q.section)) {
+    return fail('open_questions[' + i + '].section invalid: "' + q.section + '"');
+  }
+  if (!q.priority || !VALID_PRIORITIES.has(q.priority)) {
+    return fail('open_questions[' + i + '].priority invalid: "' + q.priority + '"');
+  }
+}
+
+// ── contradictions ────────────────────────────────────────────────────────────
 if (!Array.isArray(payload.contradictions)) payload.contradictions = [];
+for (let i = 0; i < payload.contradictions.length; i++) {
+  const c = payload.contradictions[i];
+  if (!c.section || !c.field) {
+    return fail('contradictions[' + i + '] missing section or field');
+  }
+  if (typeof c.description !== 'string') {
+    return fail('contradictions[' + i + '].description must be a string');
+  }
+}
+
+// ── author_notes ──────────────────────────────────────────────────────────────
 if (!Array.isArray(payload.author_notes)) payload.author_notes = [];
+for (let i = 0; i < payload.author_notes.length; i++) {
+  const n = payload.author_notes[i];
+  if (!n.type || !VALID_NOTE_TYPES.has(n.type)) {
+    return fail('author_notes[' + i + '].type invalid: "' + n.type +
+                '". Expected one of: ' + [...VALID_NOTE_TYPES].join(', '));
+  }
+  if (typeof n.value !== 'string') {
+    return fail('author_notes[' + i + '].value must be a string');
+  }
+  if (!VALID_NOTE_STATUSES.has(n.status)) {
+    return fail('author_notes[' + i + '].status invalid: "' + n.status + '"');
+  }
+}
+
+// ── completeness_hints ────────────────────────────────────────────────────────
 if (!payload.completeness_hints) {
   payload.completeness_hints = { ready_for_outline: false, priority_gaps: [] };
+} else {
+  if (typeof payload.completeness_hints.ready_for_outline !== 'boolean') {
+    return fail('completeness_hints.ready_for_outline must be a boolean');
+  }
+  if (!Array.isArray(payload.completeness_hints.priority_gaps)) {
+    payload.completeness_hints.priority_gaps = [];
+  }
 }
 
 return [{ json: { parse_error: false, payload } }];
@@ -378,8 +461,13 @@ try {
   const fsLib   = require('fs');
   const pathLib = require('path');
 
-  const logDir = pathLib.dirname(logPath);
-  if (!fsLib.existsSync(logDir)) fsLib.mkdirSync(logDir, { recursive: true });
+  // Ensure all output parent directories exist
+  const packDir  = pathLib.dirname(packPath);
+  const logDir   = pathLib.dirname(logPath);
+  const nextQDir = pathLib.dirname(nextQPath);
+  if (!fsLib.existsSync(packDir))  fsLib.mkdirSync(packDir,  { recursive: true });
+  if (!fsLib.existsSync(logDir))   fsLib.mkdirSync(logDir,   { recursive: true });
+  if (!fsLib.existsSync(nextQDir)) fsLib.mkdirSync(nextQDir, { recursive: true });
 
   // Write master pack — only reached on successful parse + merge
   fsLib.writeFileSync(packPath, JSON.stringify(pack, null, 2));
@@ -445,7 +533,7 @@ return [{
 
 function codeNode(name, position, jsCode) {
   return {
-    id: uuid(),
+    id: deterministicUuid(name + '-node'),
     name,
     type: 'n8n-nodes-base.code',
     typeVersion: 2,
@@ -456,7 +544,7 @@ function codeNode(name, position, jsCode) {
 
 function httpRequestNode(name, position) {
   return {
-    id: uuid(),
+    id: deterministicUuid(name + '-node'),
     name,
     type: 'n8n-nodes-base.httpRequest',
     typeVersion: 4.2,
@@ -483,13 +571,13 @@ function httpRequestNode(name, position) {
 
 // ─── Assemble nodes ───────────────────────────────────────────────────────────
 
-const webhookId = uuid();
+const webhookId = deterministicUuid('Webhook-webhookId');
 
 const nodes = [
 
   // 1 — Receive input
   {
-    id: uuid(),
+    id: deterministicUuid('Webhook-node'),
     name: 'Webhook',
     type: 'n8n-nodes-base.webhook',
     typeVersion: 1.1,
@@ -527,7 +615,7 @@ const nodes = [
 
   // 9 — Route on parse_error flag
   {
-    id: uuid(),
+    id: deterministicUuid('IF: Parse Error-node'),
     name: 'IF: Parse Error',
     type: 'n8n-nodes-base.if',
     typeVersion: 2,
@@ -537,7 +625,7 @@ const nodes = [
         options: { caseSensitive: true, leftValue: '', typeValidation: 'strict' },
         conditions: [
           {
-            id: uuid(),
+            id: deterministicUuid('IF: Parse Error-condition-0'),
             leftValue: '={{ $json.parse_error }}',
             rightValue: true,
             operator: { type: 'boolean', operation: 'equals' }
@@ -554,7 +642,7 @@ const nodes = [
   //      We wire: Parse and Validate (false branch) → transform → Merge Patches
   //      The Code node below reshapes the data before merge:
   {
-    id: uuid(),
+    id: deterministicUuid('Prepare Merge Input-node'),
     name: 'Prepare Merge Input',
     type: 'n8n-nodes-base.code',
     typeVersion: 2,
@@ -645,7 +733,7 @@ const workflow = {
     saveManualExecutions: true,
     callerPolicy: 'workflowsFromSameOwner'
   },
-  versionId: uuid(),
+  versionId: deterministicUuid('step2-foundation-processor-versionId'),
   meta: {
     instanceId: 'oneirophany-step2',
     templateCredsSetupCompleted: false

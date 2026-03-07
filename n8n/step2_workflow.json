@@ -2,7 +2,7 @@
   "name": "Oneirophany — Step 2 Foundation Processor",
   "nodes": [
     {
-      "id": "a6c98746-6416-460d-a789-e878bb06fd0d",
+      "id": "0355afdf-9809-445c-96c0-c7cf5cf0fef0",
       "name": "Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1.1,
@@ -17,10 +17,10 @@
         "httpMethod": "POST",
         "options": {}
       },
-      "webhookId": "5220e474-537f-41af-bafa-7678db633242"
+      "webhookId": "892daa35-982c-4687-a453-6655405b5222"
     },
     {
-      "id": "50872a22-e1f4-4886-a2b4-b54b6ae613b9",
+      "id": "d0677cf8-2cac-4839-a92b-da4e6e9ba115",
       "name": "Validate Input",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -33,7 +33,7 @@
       }
     },
     {
-      "id": "f97bf5c8-18e7-4559-af80-b7f869caafb6",
+      "id": "a16ab03f-533d-47db-8ad7-8d016abfea03",
       "name": "Load Current Pack",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -46,7 +46,7 @@
       }
     },
     {
-      "id": "3a13562e-eee2-4961-bc34-378ad033610c",
+      "id": "b594af6f-47af-4a14-a41d-143c8e65171e",
       "name": "Build Normalize Request",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -59,7 +59,7 @@
       }
     },
     {
-      "id": "e6eb0cd7-6e39-4c4f-9cb7-c53d7f98e923",
+      "id": "25624043-e72e-4cf7-9c70-6931cdb1a9bf",
       "name": "AI: Normalize Text",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
@@ -95,7 +95,7 @@
       }
     },
     {
-      "id": "d19c27cf-47ea-46b3-816a-ccb986805e0a",
+      "id": "a8845ce2-1f08-41b7-8953-c3a506830d4e",
       "name": "Build Extract Request",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -108,7 +108,7 @@
       }
     },
     {
-      "id": "1b0642ed-fb47-41dc-a43a-60e7db2de948",
+      "id": "9a7b30d9-483a-4785-85d2-dda541ecdbdd",
       "name": "AI: Extract Payload",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
@@ -144,7 +144,7 @@
       }
     },
     {
-      "id": "11570b33-0573-4c21-8e14-eeff24ed5fa3",
+      "id": "3b97619d-3eb8-4e53-a085-c6f5a59860b8",
       "name": "Parse and Validate",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -153,11 +153,11 @@
         380
       ],
       "parameters": {
-        "jsCode": "const response = $input.first().json;\nconst rawText = response.content && response.content[0]\n  ? response.content[0].text\n  : String(response);\n\n// Strip markdown code fences if the model wrapped the JSON\nconst cleaned = rawText.replace(/^```json\\s*/i, '').replace(/\\s*```$/i, '').trim();\n\nlet payload;\ntry {\n  payload = JSON.parse(cleaned);\n} catch (e) {\n  return [{\n    json: {\n      parse_error: true,\n      raw_response: rawText,\n      error_message: 'JSON parse failed: ' + e.message\n    }\n  }];\n}\n\n// Structural validation\nif (!payload.updates || !Array.isArray(payload.updates)) {\n  return [{\n    json: {\n      parse_error: true,\n      raw_response: rawText,\n      error_message: 'updates array missing from payload'\n    }\n  }];\n}\n\nif (!payload.round_info || typeof payload.round_info !== 'object') {\n  return [{\n    json: {\n      parse_error: true,\n      raw_response: rawText,\n      error_message: 'round_info object missing from payload'\n    }\n  }];\n}\n\nconst VALID_STATUSES = new Set(['confirmed', 'tentative', 'superseded']);\nfor (let i = 0; i < payload.updates.length; i++) {\n  const u = payload.updates[i];\n  if (!u.section || !u.field) {\n    return [{\n      json: {\n        parse_error: true,\n        raw_response: rawText,\n        error_message: 'updates[' + i + '] missing section or field'\n      }\n    }];\n  }\n  if (!VALID_STATUSES.has(u.status)) {\n    return [{\n      json: {\n        parse_error: true,\n        raw_response: rawText,\n        error_message: 'updates[' + i + '] has invalid status: ' + u.status\n      }\n    }];\n  }\n}\n\n// Fill optional arrays with defaults\nif (!Array.isArray(payload.open_questions)) payload.open_questions = [];\nif (!Array.isArray(payload.contradictions)) payload.contradictions = [];\nif (!Array.isArray(payload.author_notes)) payload.author_notes = [];\nif (!payload.completeness_hints) {\n  payload.completeness_hints = { ready_for_outline: false, priority_gaps: [] };\n}\n\nreturn [{ json: { parse_error: false, payload } }];"
+        "jsCode": "const response = $input.first().json;\nconst rawText = response.content && response.content[0]\n  ? response.content[0].text\n  : String(response);\n\n// Strip markdown code fences if the model wrapped the JSON\nconst cleaned = rawText.replace(/^```json\\s*/i, '').replace(/\\s*```$/i, '').trim();\n\nlet payload;\ntry {\n  payload = JSON.parse(cleaned);\n} catch (e) {\n  return [{ json: { parse_error: true, raw_response: rawText, error_message: 'JSON parse failed: ' + e.message } }];\n}\n\n// ── Enum sets — mirrors foundation_update_payload.schema.json ─────────────────\nconst VALID_SECTIONS = new Set([\n  'project_core', 'world_foundation', 'story_engine',\n  'character_system', 'plot_frame', 'ending_design', 'author_preferences'\n]);\n\nconst VALID_FIELDS = new Set([\n  'title', 'format', 'genre_primary', 'subgenre', 'premise', 'hook', 'audience', 'market_position',\n  'setting_type', 'time_period', 'primary_location', 'major_world_rules', 'power_structures',\n  'magic_or_power_system', 'cultures', 'world_conflicts', 'secrets',\n  'central_conflict', 'story_question', 'stakes', 'themes', 'hooks', 'pressure_points', 'reader_experience',\n  'protagonist_name', 'protagonist_role_summary', 'protagonist_external_goal',\n  'protagonist_internal_need', 'protagonist_wound', 'protagonist_flaw',\n  'protagonist_arc_direction', 'protagonist_voice_notes',\n  'antagonist_name', 'antagonist_nature', 'antagonist_role_summary',\n  'antagonist_motivation', 'antagonist_relationship_to_protagonist',\n  'relationship_map', 'factions',\n  'beginning_state', 'inciting_incident', 'first_turn', 'midpoint',\n  'darkest_moment', 'climax', 'resolution_shape', 'major_reveals', 'set_pieces',\n  'ending_summary', 'final_image', 'protagonist_final_state', 'relationship_end_states',\n  'world_state_after', 'required_payoffs', 'emotional_ending_feel',\n  'pov_preference', 'prose_register', 'chapter_length_target', 'tense_preference',\n  'explicit_inspirations', 'must_include', 'must_avoid', 'content_limits',\n  'trope_targets', 'trope_avoids', 'favorite_elements', 'non_negotiables',\n  'style_preferences', 'constraints'\n]);\n\nconst VALID_STATUSES      = new Set(['confirmed', 'tentative', 'superseded']);\nconst VALID_SOURCE_TYPES  = new Set(['chat', 'voice', 'notes', 'mixed']);\nconst VALID_PRIORITIES    = new Set(['high', 'medium', 'low']);\nconst VALID_NOTE_TYPES    = new Set(['must_include', 'must_avoid', 'style_preference', 'constraint', 'inspiration', 'nonnegotiable']);\nconst VALID_NOTE_STATUSES = new Set(['confirmed', 'tentative']);\nconst VALID_Q_SECTIONS    = new Set([...VALID_SECTIONS, 'general']);\n\nfunction fail(msg) {\n  return [{ json: { parse_error: true, raw_response: rawText, error_message: msg } }];\n}\n\n// ── round_info ────────────────────────────────────────────────────────────────\nif (!payload.round_info || typeof payload.round_info !== 'object') {\n  return fail('round_info object missing from payload');\n}\nif (!payload.round_info.round_label || typeof payload.round_info.round_label !== 'string') {\n  return fail('round_info.round_label missing or not a string');\n}\nif (!VALID_SOURCE_TYPES.has(payload.round_info.source_type)) {\n  return fail('round_info.source_type invalid: \"' + payload.round_info.source_type +\n              '\". Expected one of: ' + [...VALID_SOURCE_TYPES].join(', '));\n}\nif (!payload.round_info.handoff_date || !/^\\d{4}-\\d{2}-\\d{2}$/.test(payload.round_info.handoff_date)) {\n  return fail('round_info.handoff_date missing or not ISO date (YYYY-MM-DD): ' + payload.round_info.handoff_date);\n}\n\n// ── updates ───────────────────────────────────────────────────────────────────\nif (!payload.updates || !Array.isArray(payload.updates)) {\n  return fail('updates array missing from payload');\n}\nfor (let i = 0; i < payload.updates.length; i++) {\n  const u = payload.updates[i];\n  if (!u.section || !VALID_SECTIONS.has(u.section)) {\n    return fail('updates[' + i + '] invalid section: \"' + u.section + '\"');\n  }\n  if (!u.field || !VALID_FIELDS.has(u.field)) {\n    return fail('updates[' + i + '] invalid field: \"' + u.field + '\"');\n  }\n  if (!VALID_STATUSES.has(u.status)) {\n    return fail('updates[' + i + '] invalid status: \"' + u.status + '\"');\n  }\n  const v = u.value;\n  if (v !== null && typeof v !== 'string' && !Array.isArray(v)) {\n    return fail('updates[' + i + '].value must be string, array of strings, or null');\n  }\n  if (Array.isArray(v) && !v.every(el => typeof el === 'string')) {\n    return fail('updates[' + i + '].value array must contain only strings');\n  }\n}\n\n// ── open_questions ────────────────────────────────────────────────────────────\nif (!Array.isArray(payload.open_questions)) payload.open_questions = [];\nfor (let i = 0; i < payload.open_questions.length; i++) {\n  const q = payload.open_questions[i];\n  if (!q.question || typeof q.question !== 'string') {\n    return fail('open_questions[' + i + '].question missing or not a string');\n  }\n  if (!q.section || !VALID_Q_SECTIONS.has(q.section)) {\n    return fail('open_questions[' + i + '].section invalid: \"' + q.section + '\"');\n  }\n  if (!q.priority || !VALID_PRIORITIES.has(q.priority)) {\n    return fail('open_questions[' + i + '].priority invalid: \"' + q.priority + '\"');\n  }\n}\n\n// ── contradictions ────────────────────────────────────────────────────────────\nif (!Array.isArray(payload.contradictions)) payload.contradictions = [];\nfor (let i = 0; i < payload.contradictions.length; i++) {\n  const c = payload.contradictions[i];\n  if (!c.section || !c.field) {\n    return fail('contradictions[' + i + '] missing section or field');\n  }\n  if (typeof c.description !== 'string') {\n    return fail('contradictions[' + i + '].description must be a string');\n  }\n}\n\n// ── author_notes ──────────────────────────────────────────────────────────────\nif (!Array.isArray(payload.author_notes)) payload.author_notes = [];\nfor (let i = 0; i < payload.author_notes.length; i++) {\n  const n = payload.author_notes[i];\n  if (!n.type || !VALID_NOTE_TYPES.has(n.type)) {\n    return fail('author_notes[' + i + '].type invalid: \"' + n.type +\n                '\". Expected one of: ' + [...VALID_NOTE_TYPES].join(', '));\n  }\n  if (typeof n.value !== 'string') {\n    return fail('author_notes[' + i + '].value must be a string');\n  }\n  if (!VALID_NOTE_STATUSES.has(n.status)) {\n    return fail('author_notes[' + i + '].status invalid: \"' + n.status + '\"');\n  }\n}\n\n// ── completeness_hints ────────────────────────────────────────────────────────\nif (!payload.completeness_hints) {\n  payload.completeness_hints = { ready_for_outline: false, priority_gaps: [] };\n} else {\n  if (typeof payload.completeness_hints.ready_for_outline !== 'boolean') {\n    return fail('completeness_hints.ready_for_outline must be a boolean');\n  }\n  if (!Array.isArray(payload.completeness_hints.priority_gaps)) {\n    payload.completeness_hints.priority_gaps = [];\n  }\n}\n\nreturn [{ json: { parse_error: false, payload } }];"
       }
     },
     {
-      "id": "dd15ecce-4b87-47a6-afa6-53952830e4da",
+      "id": "55d45c76-4417-4cdc-8606-c2e86e45caae",
       "name": "IF: Parse Error",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
@@ -174,7 +174,7 @@
           },
           "conditions": [
             {
-              "id": "e98b97ed-aa6e-4ac3-99d5-25a91f33ff1a",
+              "id": "3fdc0b79-3705-4dff-8fb4-1f0091043a12",
               "leftValue": "={{ $json.parse_error }}",
               "rightValue": true,
               "operator": {
@@ -188,7 +188,7 @@
       }
     },
     {
-      "id": "3f2198bf-af2f-47b1-90a5-c2bfa9b923ad",
+      "id": "1655465a-003b-422d-8cb3-2d26df7f3862",
       "name": "Prepare Merge Input",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -201,7 +201,7 @@
       }
     },
     {
-      "id": "b57aa230-b728-4f91-bc6b-ccd874172b66",
+      "id": "a6235c29-e688-427d-961d-36b858de7948",
       "name": "Merge Patches",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -214,7 +214,7 @@
       }
     },
     {
-      "id": "d3b9ca56-0ff4-45d2-b554-f4dbf8aa24b4",
+      "id": "e8147bba-dc05-456d-a3db-8fa1d764928e",
       "name": "Build Next Questions Request",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -227,7 +227,7 @@
       }
     },
     {
-      "id": "f8e1863b-17dd-44b4-be67-a3097b93882a",
+      "id": "7204968c-94a1-4af2-b8c4-694d106ce893",
       "name": "AI: Next Questions",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
@@ -263,7 +263,7 @@
       }
     },
     {
-      "id": "a9588dfe-a561-4d21-bba6-8ef245d824b9",
+      "id": "2b6ec6a1-0db5-4f21-abe6-77c8b40ae40c",
       "name": "Save Outputs",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -272,11 +272,11 @@
         240
       ],
       "parameters": {
-        "jsCode": "const prev = $('Build Next Questions Request').first().json;\nconst nqResponse = $('AI: Next Questions').first().json;\n\nconst pack = prev.updated_pack;\nconst report = prev.merge_report;\nconst round_summary = prev.round_summary;\n\n// Parse next questions from AI response\nconst nqRawText = nqResponse.content && nqResponse.content[0]\n  ? nqResponse.content[0].text\n  : '[]';\n\nlet next_questions = [];\ntry {\n  const nqCleaned = nqRawText.replace(/^```json\\s*/i, '').replace(/\\s*```$/i, '').trim();\n  next_questions = JSON.parse(nqCleaned);\n} catch (e) {\n  next_questions = [{\n    question: 'Error parsing next questions — check raw AI output.',\n    section: 'general',\n    why: 'parse failure: ' + e.message\n  }];\n}\n\nconst packPath    = process.env.ONEIROPHANY_PACK_PATH     || '/data/story_foundation_pack.json';\nconst logPath     = process.env.ONEIROPHANY_LOG_PATH      || '/data/rounds/round_' + pack.version + '.json';\nconst nextQPath   = process.env.ONEIROPHANY_NEXT_Q_PATH   || '/data/next_questions.json';\n\nconst roundLog = {\n  version: pack.version,\n  timestamp: pack.last_modified,\n  round_label: pack.changelog[pack.changelog.length - 1].round_label,\n  summary: round_summary,\n  merge_report: report,\n  next_questions\n};\n\ntry {\n  const fsLib   = require('fs');\n  const pathLib = require('path');\n\n  const logDir = pathLib.dirname(logPath);\n  if (!fsLib.existsSync(logDir)) fsLib.mkdirSync(logDir, { recursive: true });\n\n  // Write master pack — only reached on successful parse + merge\n  fsLib.writeFileSync(packPath, JSON.stringify(pack, null, 2));\n\n  // Write round log\n  fsLib.writeFileSync(logPath, JSON.stringify(roundLog, null, 2));\n\n  // Write next questions (overwrite each round — ephemeral artifact)\n  fsLib.writeFileSync(nextQPath, JSON.stringify(next_questions, null, 2));\n\n} catch (err) {\n  throw new Error('Save Outputs failed: ' + err.message);\n}\n\nreturn [{\n  json: {\n    success: true,\n    version: pack.version,\n    round_summary,\n    ready_for_outline: pack.completeness_status.ready_for_outline,\n    ready_for_drafting: pack.completeness_status.ready_for_drafting,\n    blocking_issues: pack.completeness_status.blocking_issues,\n    next_questions,\n    merge_report: report\n  }\n}];"
+        "jsCode": "const prev = $('Build Next Questions Request').first().json;\nconst nqResponse = $('AI: Next Questions').first().json;\n\nconst pack = prev.updated_pack;\nconst report = prev.merge_report;\nconst round_summary = prev.round_summary;\n\n// Parse next questions from AI response\nconst nqRawText = nqResponse.content && nqResponse.content[0]\n  ? nqResponse.content[0].text\n  : '[]';\n\nlet next_questions = [];\ntry {\n  const nqCleaned = nqRawText.replace(/^```json\\s*/i, '').replace(/\\s*```$/i, '').trim();\n  next_questions = JSON.parse(nqCleaned);\n} catch (e) {\n  next_questions = [{\n    question: 'Error parsing next questions — check raw AI output.',\n    section: 'general',\n    why: 'parse failure: ' + e.message\n  }];\n}\n\nconst packPath    = process.env.ONEIROPHANY_PACK_PATH     || '/data/story_foundation_pack.json';\nconst logPath     = process.env.ONEIROPHANY_LOG_PATH      || '/data/rounds/round_' + pack.version + '.json';\nconst nextQPath   = process.env.ONEIROPHANY_NEXT_Q_PATH   || '/data/next_questions.json';\n\nconst roundLog = {\n  version: pack.version,\n  timestamp: pack.last_modified,\n  round_label: pack.changelog[pack.changelog.length - 1].round_label,\n  summary: round_summary,\n  merge_report: report,\n  next_questions\n};\n\ntry {\n  const fsLib   = require('fs');\n  const pathLib = require('path');\n\n  // Ensure all output parent directories exist\n  const packDir  = pathLib.dirname(packPath);\n  const logDir   = pathLib.dirname(logPath);\n  const nextQDir = pathLib.dirname(nextQPath);\n  if (!fsLib.existsSync(packDir))  fsLib.mkdirSync(packDir,  { recursive: true });\n  if (!fsLib.existsSync(logDir))   fsLib.mkdirSync(logDir,   { recursive: true });\n  if (!fsLib.existsSync(nextQDir)) fsLib.mkdirSync(nextQDir, { recursive: true });\n\n  // Write master pack — only reached on successful parse + merge\n  fsLib.writeFileSync(packPath, JSON.stringify(pack, null, 2));\n\n  // Write round log\n  fsLib.writeFileSync(logPath, JSON.stringify(roundLog, null, 2));\n\n  // Write next questions (overwrite each round — ephemeral artifact)\n  fsLib.writeFileSync(nextQPath, JSON.stringify(next_questions, null, 2));\n\n} catch (err) {\n  throw new Error('Save Outputs failed: ' + err.message);\n}\n\nreturn [{\n  json: {\n    success: true,\n    version: pack.version,\n    round_summary,\n    ready_for_outline: pack.completeness_status.ready_for_outline,\n    ready_for_drafting: pack.completeness_status.ready_for_drafting,\n    blocking_issues: pack.completeness_status.blocking_issues,\n    next_questions,\n    merge_report: report\n  }\n}];"
       }
     },
     {
-      "id": "73fc3cca-c239-404c-b426-2fd6c3535652",
+      "id": "eecfcabd-b9b8-41a5-a5f9-60b0e81bc773",
       "name": "Error Handler",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -448,7 +448,7 @@
     "saveManualExecutions": true,
     "callerPolicy": "workflowsFromSameOwner"
   },
-  "versionId": "ef4079e6-d2f4-4728-9db5-eef7fafb1564",
+  "versionId": "8245658d-f8aa-4f7c-8e19-aaffb357a1a7",
   "meta": {
     "instanceId": "oneirophany-step2",
     "templateCredsSetupCompleted": false
