@@ -4,11 +4,13 @@
   "title": "Foundation Update Payload",
   "description": "The structured output returned by the AI extraction node in Step 2. Contains what was learned this round as discrete update records. Does NOT rewrite the full story_foundation_pack — the merge Code node handles that.",
   "type": "object",
+  "additionalProperties": false,
   "required": ["round_info", "summary", "updates", "open_questions", "contradictions", "author_notes", "completeness_hints"],
   "properties": {
 
     "round_info": {
       "type": "object",
+      "additionalProperties": false,
       "required": ["round_label", "source_type", "handoff_date"],
       "properties": {
         "round_label": {
@@ -22,7 +24,8 @@
         },
         "handoff_date": {
           "type": "string",
-          "description": "Date of the interview session, ISO 8601 format (YYYY-MM-DD)."
+          "format": "date",
+          "description": "Date of the interview session in ISO 8601 format: YYYY-MM-DD."
         }
       }
     },
@@ -34,9 +37,10 @@
 
     "updates": {
       "type": "array",
-      "description": "Discrete update records — one per field that was addressed this round. The merge Code node applies these to the story_foundation_pack.",
+      "description": "Discrete update records — one per field addressed this round. The merge Code node applies these to the story_foundation_pack.",
       "items": {
         "type": "object",
+        "additionalProperties": false,
         "required": ["section", "field", "value", "status"],
         "properties": {
 
@@ -56,24 +60,18 @@
 
           "field": {
             "type": "string",
-            "description": "The specific field within that section. See field reference below.",
-            "examples": [
-              "premise",
-              "genre_primary",
-              "setting_summary",
-              "central_conflict",
-              "protagonist_name",
-              "protagonist_external_goal",
-              "protagonist_internal_need",
-              "protagonist_wound",
-              "antagonist_nature",
-              "inciting_incident",
-              "ending_summary",
-              "emotional_ending_feel",
-              "must_avoid",
-              "pov_preference",
-              "prose_register"
-            ]
+            "enum": [
+              "title", "format", "genre_primary", "subgenre", "premise", "hook", "audience", "market_position",
+              "setting_type", "time_period", "primary_location", "major_world_rules", "power_structures", "magic_or_power_system", "cultures", "world_conflicts", "secrets",
+              "central_conflict", "story_question", "stakes", "themes", "hooks", "pressure_points", "reader_experience",
+              "protagonist_name", "protagonist_role_summary", "protagonist_external_goal", "protagonist_internal_need", "protagonist_wound", "protagonist_flaw", "protagonist_arc_direction", "protagonist_voice_notes",
+              "antagonist_name", "antagonist_nature", "antagonist_role_summary", "antagonist_motivation", "antagonist_relationship_to_protagonist",
+              "relationship_map", "factions",
+              "beginning_state", "inciting_incident", "first_turn", "midpoint", "darkest_moment", "climax", "resolution_shape", "major_reveals", "set_pieces",
+              "ending_summary", "final_image", "protagonist_final_state", "relationship_end_states", "world_state_after", "required_payoffs", "emotional_ending_feel",
+              "pov_preference", "prose_register", "chapter_length_target", "tense_preference", "explicit_inspirations", "must_include", "must_avoid", "content_limits", "trope_targets", "trope_avoids", "favorite_elements", "non_negotiables", "style_preferences", "constraints"
+            ],
+            "description": "The specific field within the section. Must match a canonical field name — see $defs.field_reference for the full list by section."
           },
 
           "value": {
@@ -88,12 +86,12 @@
           "status": {
             "type": "string",
             "enum": ["confirmed", "tentative", "superseded"],
-            "description": "confirmed: author stated this clearly and directly. tentative: author hedged or expressed uncertainty. superseded: author explicitly revised a prior statement — include the new value here."
+            "description": "confirmed: author stated this clearly and directly. tentative: author hedged or expressed uncertainty. superseded: author explicitly revised a prior statement — include the replacement value here."
           },
 
           "source_quote": {
             "type": "string",
-            "description": "The line or close paraphrase from the interview that supports this update. Used for debugging and merge audit. Leave empty string if not applicable."
+            "description": "The line or close paraphrase from the interview that supports this update. Used for debugging and merge audit. Empty string if not applicable."
           },
 
           "notes": {
@@ -110,6 +108,7 @@
       "description": "Unresolved questions identified this round. The merge node adds these to the pack's open_questions list.",
       "items": {
         "type": "object",
+        "additionalProperties": false,
         "required": ["question", "section", "priority", "reason"],
         "properties": {
           "question": { "type": "string" },
@@ -140,15 +139,30 @@
 
     "contradictions": {
       "type": "array",
-      "description": "Conflicts between what was said this round and what is already in the pack. The merge node logs these and does NOT auto-resolve them. Author must resolve before the field can be updated.",
+      "description": "Conflicts between what was said this round and what is already confirmed in the pack. The merge node logs these without auto-resolving. Author must resolve before the field can be updated.",
       "items": {
         "type": "object",
+        "additionalProperties": false,
         "required": ["section", "field", "earlier_value", "new_value", "description", "needs_author_resolution"],
         "properties": {
-          "section":                  { "type": "string" },
-          "field":                    { "type": "string" },
-          "earlier_value":            { "description": "The current confirmed value in the pack." },
-          "new_value":                { "description": "The conflicting value from this round." },
+          "section": { "type": "string" },
+          "field":   { "type": "string" },
+          "earlier_value": {
+            "description": "The current confirmed value in the pack.",
+            "oneOf": [
+              { "type": "string" },
+              { "type": "array", "items": { "type": "string" } },
+              { "type": "null" }
+            ]
+          },
+          "new_value": {
+            "description": "The conflicting value from this round.",
+            "oneOf": [
+              { "type": "string" },
+              { "type": "array", "items": { "type": "string" } },
+              { "type": "null" }
+            ]
+          },
           "description": {
             "type": "string",
             "description": "Plain explanation of why these conflict."
@@ -163,14 +177,16 @@
 
     "author_notes": {
       "type": "array",
-      "description": "Preferences, constraints, and non-negotiables the author mentioned. These map to the author_preferences section of the pack.",
+      "description": "Preferences, constraints, and non-negotiables the author mentioned. These map to the author_preferences section of the pack. Do not duplicate content already in updates.",
       "items": {
         "type": "object",
+        "additionalProperties": false,
         "required": ["type", "value", "status"],
         "properties": {
           "type": {
             "type": "string",
-            "enum": ["must_include", "must_avoid", "style_preference", "constraint", "inspiration", "nonnegotiable"]
+            "enum": ["must_include", "must_avoid", "style_preference", "constraint", "inspiration", "nonnegotiable"],
+            "description": "must_include/must_avoid -> author_preferences.must_include/must_avoid. style_preference -> style_preferences. constraint -> constraints. inspiration -> explicit_inspirations. nonnegotiable -> non_negotiables."
           },
           "value": { "type": "string" },
           "status": {
@@ -183,7 +199,8 @@
 
     "completeness_hints": {
       "type": "object",
-      "description": "The model's read on overall readiness. These are hints only — the merge Code node computes authoritative completeness_status using defined rules.",
+      "additionalProperties": false,
+      "description": "The model's read on overall readiness. Advisory only — the merge Code node computes authoritative completeness_status using defined rules.",
       "required": ["ready_for_outline", "priority_gaps"],
       "properties": {
         "ready_for_outline": {
@@ -192,8 +209,9 @@
         },
         "priority_gaps": {
           "type": "array",
+          "maxItems": 5,
           "items": { "type": "string" },
-          "description": "Plain-language descriptions of the most important missing pieces. Max 5."
+          "description": "Plain-language descriptions of the most important missing pieces."
         }
       }
     }
@@ -202,19 +220,14 @@
 
   "$defs": {
     "field_reference": {
-      "description": "Field names by section. These are the canonical field identifiers used in the 'field' property of each update record.",
-      "project_core": ["title", "format", "genre_primary", "subgenre", "premise", "hook", "audience", "market_position"],
-      "world_foundation": ["setting_type", "time_period", "primary_location", "major_world_rules", "power_structures", "magic_or_power_system", "cultures", "world_conflicts", "secrets"],
-      "story_engine": ["central_conflict", "story_question", "stakes", "themes", "hooks", "pressure_points", "reader_experience"],
-      "character_system": [
-        "protagonist_name", "protagonist_role_summary", "protagonist_external_goal", "protagonist_internal_need",
-        "protagonist_wound", "protagonist_flaw", "protagonist_arc_direction", "protagonist_voice_notes",
-        "antagonist_name", "antagonist_nature", "antagonist_role_summary", "antagonist_motivation", "antagonist_relationship_to_protagonist",
-        "relationship_map", "factions"
-      ],
-      "plot_frame": ["beginning_state", "inciting_incident", "first_turn", "midpoint", "darkest_moment", "climax", "resolution_shape", "major_reveals", "set_pieces"],
-      "ending_design": ["ending_summary", "final_image", "protagonist_final_state", "relationship_end_states", "world_state_after", "required_payoffs", "emotional_ending_feel"],
-      "author_preferences": ["pov_preference", "prose_register", "chapter_length_target", "tense_preference", "explicit_inspirations", "must_include", "must_avoid", "content_limits", "trope_targets", "trope_avoids", "favorite_elements", "non_negotiables"]
+      "description": "Canonical field names by section. The field enum above is the enforced version of this reference.",
+      "project_core":       ["title", "format", "genre_primary", "subgenre", "premise", "hook", "audience", "market_position"],
+      "world_foundation":   ["setting_type", "time_period", "primary_location", "major_world_rules", "power_structures", "magic_or_power_system", "cultures", "world_conflicts", "secrets"],
+      "story_engine":       ["central_conflict", "story_question", "stakes", "themes", "hooks", "pressure_points", "reader_experience"],
+      "character_system":   ["protagonist_name", "protagonist_role_summary", "protagonist_external_goal", "protagonist_internal_need", "protagonist_wound", "protagonist_flaw", "protagonist_arc_direction", "protagonist_voice_notes", "antagonist_name", "antagonist_nature", "antagonist_role_summary", "antagonist_motivation", "antagonist_relationship_to_protagonist", "relationship_map", "factions"],
+      "plot_frame":         ["beginning_state", "inciting_incident", "first_turn", "midpoint", "darkest_moment", "climax", "resolution_shape", "major_reveals", "set_pieces"],
+      "ending_design":      ["ending_summary", "final_image", "protagonist_final_state", "relationship_end_states", "world_state_after", "required_payoffs", "emotional_ending_feel"],
+      "author_preferences": ["pov_preference", "prose_register", "chapter_length_target", "tense_preference", "explicit_inspirations", "must_include", "must_avoid", "content_limits", "trope_targets", "trope_avoids", "favorite_elements", "non_negotiables", "style_preferences", "constraints"]
     }
   }
 }

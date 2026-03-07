@@ -55,10 +55,10 @@
       "type": "object",
       "description": "Basic identity of the project.",
       "properties": {
-        "title":     { "$ref": "#/definitions/field_string" },
-        "format":    { "$ref": "#/definitions/field_string", "description": "Novel, novella, series, short story, etc." },
-        "genre":     { "$ref": "#/definitions/field_string" },
-        "subgenre":  { "$ref": "#/definitions/field_string" },
+        "title":         { "$ref": "#/definitions/field_string" },
+        "format":        { "$ref": "#/definitions/field_string", "description": "Novel, novella, series, short story, etc." },
+        "genre_primary": { "$ref": "#/definitions/field_string" },
+        "subgenre":      { "$ref": "#/definitions/field_string" },
         "premise":   { "$ref": "#/definitions/field_string", "description": "One or two sentence distillation of what the story is about." },
         "hook":      { "$ref": "#/definitions/field_string", "description": "The compelling question or tension that draws a reader in." },
         "audience":  { "$ref": "#/definitions/field_string" },
@@ -86,12 +86,13 @@
       "type": "object",
       "description": "What makes the story move.",
       "properties": {
-        "central_conflict": { "$ref": "#/definitions/field_string" },
-        "story_question":   { "$ref": "#/definitions/field_string", "description": "The dramatic question the story must answer by its end." },
-        "stakes":           { "$ref": "#/definitions/field_string", "description": "What is lost if the protagonist fails." },
-        "themes":           { "$ref": "#/definitions/field_array" },
-        "hooks":            { "$ref": "#/definitions/field_array", "description": "Narrative hooks that sustain reader interest across the story." },
-        "pressure_points":  { "$ref": "#/definitions/field_array", "description": "Recurring sources of tension or complication." }
+        "central_conflict":  { "$ref": "#/definitions/field_string" },
+        "story_question":    { "$ref": "#/definitions/field_string", "description": "The dramatic question the story must answer by its end." },
+        "stakes":            { "$ref": "#/definitions/field_string", "description": "What is lost if the protagonist fails." },
+        "themes":            { "$ref": "#/definitions/field_array" },
+        "hooks":             { "$ref": "#/definitions/field_array", "description": "Narrative hooks that sustain reader interest across the story." },
+        "pressure_points":   { "$ref": "#/definitions/field_array", "description": "Recurring sources of tension or complication." },
+        "reader_experience": { "$ref": "#/definitions/field_string", "description": "The intended emotional and tonal experience for the reader." }
       }
     },
 
@@ -183,7 +184,9 @@
         "trope_targets":        { "$ref": "#/definitions/field_array", "description": "Tropes the author wants to use deliberately." },
         "trope_avoids":         { "$ref": "#/definitions/field_array", "description": "Tropes the author explicitly does not want." },
         "favorite_elements":    { "$ref": "#/definitions/field_array" },
-        "non_negotiables":      { "$ref": "#/definitions/field_array", "description": "Hard constraints that override story logic if there is a conflict." }
+        "non_negotiables":      { "$ref": "#/definitions/field_array", "description": "Hard constraints that override story logic if there is a conflict." },
+        "style_preferences":    { "$ref": "#/definitions/field_array", "description": "Stylistic preferences that are not hard constraints but should be respected." },
+        "constraints":          { "$ref": "#/definitions/field_array", "description": "Structural or thematic constraints the author has set beyond must_avoid." }
       }
     },
 
@@ -194,12 +197,13 @@
         "type": "object",
         "required": ["id", "question", "section", "priority"],
         "properties": {
-          "id":       { "type": "string", "description": "Stable identifier, e.g. 'oq_001'." },
-          "question": { "type": "string" },
-          "section":  { "type": "string", "description": "Which section of the pack this question pertains to." },
-          "priority": { "type": "string", "enum": ["high", "medium", "low"] },
+          "id":               { "type": "string", "description": "Stable identifier, e.g. 'oq_001'." },
+          "question":         { "type": "string" },
+          "section":          { "type": "string", "description": "Which section of the pack this question pertains to." },
+          "priority":         { "type": "string", "enum": ["high", "medium", "low"] },
+          "reason":           { "type": "string", "description": "One sentence explaining why this question matters." },
           "added_in_version": { "type": "integer" },
-          "resolved": { "type": "boolean", "default": false }
+          "resolved":         { "type": "boolean", "default": false }
         }
       }
     },

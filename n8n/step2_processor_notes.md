@@ -203,7 +203,7 @@ Field reference by section:
 - character_system: protagonist_name, protagonist_role_summary, protagonist_external_goal, protagonist_internal_need, protagonist_wound, protagonist_flaw, protagonist_arc_direction, protagonist_voice_notes, antagonist_name, antagonist_nature, antagonist_role_summary, antagonist_motivation, antagonist_relationship_to_protagonist, relationship_map, factions
 - plot_frame: beginning_state, inciting_incident, first_turn, midpoint, darkest_moment, climax, resolution_shape, major_reveals, set_pieces
 - ending_design: ending_summary, final_image, protagonist_final_state, relationship_end_states, world_state_after, required_payoffs, emotional_ending_feel
-- author_preferences: pov_preference, prose_register, chapter_length_target, tense_preference, explicit_inspirations, must_include, must_avoid, content_limits, trope_targets, trope_avoids, favorite_elements, non_negotiables
+- author_preferences: pov_preference, prose_register, chapter_length_target, tense_preference, explicit_inspirations, must_include, must_avoid, content_limits, trope_targets, trope_avoids, favorite_elements, non_negotiables, style_preferences, constraints
 
 Return only valid JSON. No explanation text outside the JSON object.
 ```

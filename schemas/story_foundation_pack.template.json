@@ -6,7 +6,7 @@
   "project_core": {
     "title":          { "value": null, "status": "unresolved" },
     "format":         { "value": null, "status": "unresolved" },
-    "genre":          { "value": null, "status": "unresolved" },
+    "genre_primary":  { "value": null, "status": "unresolved" },
     "subgenre":       { "value": null, "status": "unresolved" },
     "premise":        { "value": null, "status": "unresolved" },
     "hook":           { "value": null, "status": "unresolved" },
@@ -32,7 +32,8 @@
     "stakes":           { "value": null, "status": "unresolved" },
     "themes":           { "value": [], "status": "unresolved" },
     "hooks":            { "value": [], "status": "unresolved" },
-    "pressure_points":  { "value": [], "status": "unresolved" }
+    "pressure_points":   { "value": [], "status": "unresolved" },
+    "reader_experience": { "value": null, "status": "unresolved" }
   },
 
   "character_system": {
@@ -92,7 +93,9 @@
     "trope_targets":         { "value": [], "status": "unresolved" },
     "trope_avoids":          { "value": [], "status": "unresolved" },
     "favorite_elements":     { "value": [], "status": "unresolved" },
-    "non_negotiables":       { "value": [], "status": "unresolved" }
+    "non_negotiables":       { "value": [], "status": "unresolved" },
+    "style_preferences":     { "value": [], "status": "unresolved" },
+    "constraints":           { "value": [], "status": "unresolved" }
   },
 
   "open_questions": [],

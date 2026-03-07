@@ -12,10 +12,9 @@
  *
  * Output:
  *   {
- *     updated_pack:              story_foundation_pack,
- *     merge_report:              summary of what happened,
- *     suggested_next_questions:  from payload,
- *     round_summary:             from payload
+ *     updated_pack:     story_foundation_pack,
+ *     merge_report:     summary of what happened,
+ *     round_summary:    from payload
  *   }
  */
 
@@ -24,26 +23,47 @@ const payload = input.payload;
 const pack = JSON.parse(JSON.stringify(input.current_pack)); // deep clone — never mutate the original
 const now = new Date().toISOString();
 
+// ─── Pack normalizer ──────────────────────────────────────────────────────────
+//
+// Ensures the pack has the expected top-level shape before anything touches it.
+// Prevents path resolution failures when working with a partially initialized pack.
+
+function ensureObject(obj, key) {
+  if (!obj[key] || typeof obj[key] !== "object" || Array.isArray(obj[key])) {
+    obj[key] = {};
+  }
+}
+
+ensureObject(pack, "project_core");
+ensureObject(pack, "world_foundation");
+ensureObject(pack, "story_engine");
+ensureObject(pack, "character_system");
+ensureObject(pack, "plot_frame");
+ensureObject(pack, "ending_design");
+ensureObject(pack, "author_preferences");
+ensureObject(pack, "completeness_status");
+ensureObject(pack.character_system, "protagonist");
+ensureObject(pack.character_system, "antagonist_or_opposing_force");
+
+if (!Array.isArray(pack.open_questions)) pack.open_questions = [];
+if (!Array.isArray(pack.changelog)) pack.changelog = [];
+
 // ─── Field mapping ────────────────────────────────────────────────────────────
 //
-// Translates payload field names to nested paths within the pack.
-// Most sections are flat: pack[section][field].
-// character_system has nested protagonist / antagonist objects.
-//
-// Format: "section.field" -> ["path", "in", "pack"]
+// Translates section.field keys from the payload to nested paths in the pack.
 
 const FIELD_MAP = {
-  // project_core — flat
+  // project_core
   "project_core.title":           ["project_core", "title"],
   "project_core.format":          ["project_core", "format"],
-  "project_core.genre_primary":   ["project_core", "genre"],
+  "project_core.genre_primary":   ["project_core", "genre_primary"],
   "project_core.subgenre":        ["project_core", "subgenre"],
   "project_core.premise":         ["project_core", "premise"],
   "project_core.hook":            ["project_core", "hook"],
   "project_core.audience":        ["project_core", "audience"],
   "project_core.market_position": ["project_core", "market_position"],
 
-  // world_foundation — flat
+  // world_foundation
   "world_foundation.setting_type":           ["world_foundation", "setting_type"],
   "world_foundation.time_period":            ["world_foundation", "time_period"],
   "world_foundation.primary_location":       ["world_foundation", "primary_location"],
@@ -54,7 +74,7 @@ const FIELD_MAP = {
   "world_foundation.world_conflicts":        ["world_foundation", "world_conflicts"],
   "world_foundation.secrets":                ["world_foundation", "secrets"],
 
-  // story_engine — flat
+  // story_engine
   "story_engine.central_conflict":  ["story_engine", "central_conflict"],
   "story_engine.story_question":    ["story_engine", "story_question"],
   "story_engine.stakes":            ["story_engine", "stakes"],
@@ -63,7 +83,7 @@ const FIELD_MAP = {
   "story_engine.pressure_points":   ["story_engine", "pressure_points"],
   "story_engine.reader_experience": ["story_engine", "reader_experience"],
 
-  // character_system — nested protagonist
+  // character_system — protagonist
   "character_system.protagonist_name":          ["character_system", "protagonist", "name"],
   "character_system.protagonist_role_summary":  ["character_system", "protagonist", "role_summary"],
   "character_system.protagonist_external_goal": ["character_system", "protagonist", "external_want"],
@@ -73,7 +93,7 @@ const FIELD_MAP = {
   "character_system.protagonist_arc_direction": ["character_system", "protagonist", "arc_direction"],
   "character_system.protagonist_voice_notes":   ["character_system", "protagonist", "voice_notes"],
 
-  // character_system — nested antagonist
+  // character_system — antagonist
   "character_system.antagonist_name":                        ["character_system", "antagonist_or_opposing_force", "name"],
   "character_system.antagonist_nature":                      ["character_system", "antagonist_or_opposing_force", "nature"],
   "character_system.antagonist_role_summary":                ["character_system", "antagonist_or_opposing_force", "role_summary"],
@@ -84,7 +104,7 @@ const FIELD_MAP = {
   "character_system.relationship_map": ["character_system", "relationship_map"],
   "character_system.factions":         ["character_system", "factions"],
 
-  // plot_frame — flat
+  // plot_frame
   "plot_frame.beginning_state":   ["plot_frame", "beginning_state"],
   "plot_frame.inciting_incident": ["plot_frame", "inciting_incident"],
   "plot_frame.first_turn":        ["plot_frame", "first_turn"],
@@ -95,7 +115,7 @@ const FIELD_MAP = {
   "plot_frame.major_reveals":     ["plot_frame", "major_reveals"],
   "plot_frame.set_pieces":        ["plot_frame", "set_pieces"],
 
-  // ending_design — flat
+  // ending_design
   "ending_design.ending_summary":          ["ending_design", "ending_summary"],
   "ending_design.final_image":             ["ending_design", "final_image"],
   "ending_design.protagonist_final_state": ["ending_design", "protagonist_final_state"],
@@ -104,7 +124,7 @@ const FIELD_MAP = {
   "ending_design.required_payoffs":        ["ending_design", "required_payoffs"],
   "ending_design.emotional_ending_feel":   ["ending_design", "emotional_ending_feel"],
 
-  // author_preferences — flat
+  // author_preferences
   "author_preferences.pov_preference":        ["author_preferences", "pov_preference"],
   "author_preferences.prose_register":        ["author_preferences", "prose_register"],
   "author_preferences.chapter_length_target": ["author_preferences", "chapter_length_target"],
@@ -116,10 +136,56 @@ const FIELD_MAP = {
   "author_preferences.trope_targets":         ["author_preferences", "trope_targets"],
   "author_preferences.trope_avoids":          ["author_preferences", "trope_avoids"],
   "author_preferences.favorite_elements":     ["author_preferences", "favorite_elements"],
-  "author_preferences.non_negotiables":       ["author_preferences", "non_negotiables"]
+  "author_preferences.non_negotiables":       ["author_preferences", "non_negotiables"],
+  "author_preferences.style_preferences":     ["author_preferences", "style_preferences"],
+  "author_preferences.constraints":           ["author_preferences", "constraints"]
 };
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+// ─── Array field registry ─────────────────────────────────────────────────────
+//
+// Canonical set of fields that hold arrays of strings.
+// Used instead of inspecting the existing field shape, which is unreliable
+// when a field has never been written yet.
+
+const ARRAY_FIELDS = new Set([
+  "world_foundation.major_world_rules",
+  "world_foundation.power_structures",
+  "world_foundation.cultures",
+  "world_foundation.world_conflicts",
+  "world_foundation.secrets",
+  "story_engine.themes",
+  "story_engine.hooks",
+  "story_engine.pressure_points",
+  "character_system.protagonist_voice_notes",
+  "character_system.relationship_map",
+  "character_system.factions",
+  "plot_frame.major_reveals",
+  "plot_frame.set_pieces",
+  "ending_design.relationship_end_states",
+  "ending_design.required_payoffs",
+  "author_preferences.explicit_inspirations",
+  "author_preferences.must_include",
+  "author_preferences.must_avoid",
+  "author_preferences.trope_targets",
+  "author_preferences.trope_avoids",
+  "author_preferences.favorite_elements",
+  "author_preferences.non_negotiables",
+  "author_preferences.style_preferences",
+  "author_preferences.constraints"
+]);
+
+// ─── Author note type mapping ─────────────────────────────────────────────────
+
+const AUTHOR_NOTE_TYPE_MAP = {
+  must_include:     "must_include",
+  must_avoid:       "must_avoid",
+  style_preference: "style_preferences",
+  constraint:       "constraints",
+  inspiration:      "explicit_inspirations",
+  nonnegotiable:    "non_negotiables"
+};
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function resolvePackPath(pathParts) {
   let cursor = pack;
@@ -135,17 +201,12 @@ function getSectionStatus(sectionName) {
   return pack.completeness_status && pack.completeness_status[sectionName];
 }
 
-function isArrayField(value) {
-  const field = typeof value === "object" && value !== null ? value : null;
-  return field && Array.isArray(field.value);
-}
-
 // ─── Tracking ─────────────────────────────────────────────────────────────────
 
 let updatesApplied = 0;
 const skipped = [];
 const lockedSkips = [];
-const contradictionsLogged = [];
+const contradictionsLogged = [];    // all contradictions, tagged by source
 const newOpenQuestions = [];
 const authorNotesApplied = [];
 
@@ -156,7 +217,6 @@ for (const update of payload.updates || []) {
   const mapKey = `${section}.${field}`;
   const pathParts = FIELD_MAP[mapKey];
 
-  // Unknown field — log and skip
   if (!pathParts) {
     skipped.push({ section, field, reason: `No mapping found for "${mapKey}"` });
     continue;
@@ -176,22 +236,22 @@ for (const update of payload.updates || []) {
 
   const currentField = ref.parent[ref.key];
   const currentStatus = currentField && currentField.status ? currentField.status : "unresolved";
+  const isArray = ARRAY_FIELDS.has(mapKey);
 
-  // Merge rules by status:
-  //   confirmed  → fill blank / overwrite tentative / overwrite superseded / do NOT overwrite confirmed
-  //   tentative  → fill blank or tentative only, never overwrite confirmed
-  //   superseded → update field, mark previous context in notes
+  // Merge rules:
+  //   confirmed  → fill blank/tentative/unresolved/superseded; do NOT overwrite confirmed (log contradiction)
+  //   tentative  → fill blank/unresolved/tentative only; never overwrite confirmed
+  //   superseded → apply only if a prior value exists; guard against nonsense
 
   if (status === "confirmed") {
     if (currentStatus === "confirmed") {
-      // Do not silently overwrite. Log as potential contradiction for human review.
       if (JSON.stringify(currentField.value) !== JSON.stringify(value)) {
         contradictionsLogged.push({
-          section,
-          field,
+          source: "merge_guard",
+          section, field,
           earlier_value: currentField.value,
           new_value: value,
-          description: `New confirmed value differs from existing confirmed value. Author review required.`,
+          description: "New confirmed value differs from existing confirmed value. Author review required.",
           needs_author_resolution: true
         });
         skipped.push({ section, field, reason: "Confirmed field conflict — logged as contradiction, not overwritten" });
@@ -200,21 +260,34 @@ for (const update of payload.updates || []) {
       }
       continue;
     }
+
   } else if (status === "tentative") {
     if (currentStatus === "confirmed") {
       skipped.push({ section, field, reason: "Cannot overwrite confirmed field with tentative value" });
       continue;
     }
-  }
-  // superseded: apply regardless of current status
 
-  // For array fields: merge new items with existing, dedupe
-  if (Array.isArray(value) && isArrayField(currentField)) {
-    const existing = Array.isArray(currentField.value) ? currentField.value : [];
-    const merged = Array.from(new Set([...existing, ...value]));
+  } else if (status === "superseded") {
+    // Guard: don't apply superseded if there is no existing value to supersede
+    if (!currentField || currentStatus === "unresolved") {
+      skipped.push({ section, field, reason: "Superseded status requires an existing value — none found, skipped" });
+      continue;
+    }
+  }
+
+  if (isArray) {
+    // Array merge: combine existing items with incoming items, dedupe
+    const existing = currentField && Array.isArray(currentField.value) ? currentField.value : [];
+    const incoming = Array.isArray(value) ? value : (value ? [value] : []);
+    const merged = Array.from(new Set([...existing, ...incoming]));
+
+    // Array status: use "max confidence" — do not downgrade a confirmed array to tentative
+    const finalStatus =
+      currentStatus === "confirmed" || status === "confirmed" ? "confirmed" : status;
+
     ref.parent[ref.key] = {
       value: merged,
-      status,
+      status: finalStatus,
       ...(source_quote ? { source_quote } : {}),
       ...(notes ? { notes } : {}),
       set_in_version: (pack.version || 0) + 1
@@ -233,18 +306,6 @@ for (const update of payload.updates || []) {
 }
 
 // ─── Merge author_notes into author_preferences ───────────────────────────────
-//
-// author_notes from the payload are preference/constraint statements.
-// Map them to the appropriate list field in author_preferences.
-
-const AUTHOR_NOTE_TYPE_MAP = {
-  must_include:      "must_include",
-  must_avoid:        "must_avoid",
-  style_preference:  "favorite_elements",
-  constraint:        "non_negotiables",
-  inspiration:       "explicit_inspirations",
-  nonnegotiable:     "non_negotiables"
-};
 
 for (const note of payload.author_notes || []) {
   const packField = AUTHOR_NOTE_TYPE_MAP[note.type];
@@ -254,16 +315,20 @@ for (const note of payload.author_notes || []) {
   if (!ref) continue;
 
   const currentField = ref.parent[ref.key];
-  if (currentField && ref.parent[ref.key].status === "confirmed" && note.status === "tentative") {
+  const currentStatus = currentField && currentField.status ? currentField.status : "unresolved";
+
+  if (currentStatus === "confirmed" && note.status === "tentative") {
     skipped.push({ section: "author_preferences", field: packField, reason: "Cannot overwrite confirmed with tentative author note" });
     continue;
   }
 
   const existing = currentField && Array.isArray(currentField.value) ? currentField.value : [];
   if (!existing.includes(note.value)) {
+    const finalStatus =
+      currentStatus === "confirmed" || note.status === "confirmed" ? "confirmed" : note.status;
     ref.parent[ref.key] = {
       value: [...existing, note.value],
-      status: note.status,
+      status: finalStatus,
       set_in_version: (pack.version || 0) + 1
     };
     authorNotesApplied.push(note);
@@ -272,16 +337,34 @@ for (const note of payload.author_notes || []) {
 }
 
 // ─── Log contradictions from payload ─────────────────────────────────────────
+//
+// Tag with source: "payload" to distinguish from contradictions caught by merge_guard above.
+// Dedupe against any merge_guard contradictions already logged for the same section.field.
+
+const mergeGuardKeys = new Set(
+  contradictionsLogged.map(c => `${c.section}.${c.field}`)
+);
 
 for (const c of payload.contradictions || []) {
-  contradictionsLogged.push(c);
+  const key = `${c.section}.${c.field}`;
+  if (mergeGuardKeys.has(key)) continue; // already caught by merge_guard, skip duplicate
+  contradictionsLogged.push({ source: "payload", ...c });
 }
 
-// ─── Add open questions ───────────────────────────────────────────────────────
+// ─── Add open questions (with dedupe) ────────────────────────────────────────
 
-let nextOqId = (pack.open_questions || []).length + 1;
+let nextOqId = pack.open_questions.length + 1;
 
 for (const oq of payload.open_questions || []) {
+  // Dedupe: skip if an identical unresolved question already exists
+  const alreadyExists = pack.open_questions.some(
+    existing =>
+      existing.question.trim().toLowerCase() === oq.question.trim().toLowerCase() &&
+      existing.section === oq.section &&
+      !existing.resolved
+  );
+  if (alreadyExists) continue;
+
   const id = `oq_${String(nextOqId).padStart(3, "0")}`;
   newOpenQuestions.push({
     id,
@@ -295,7 +378,6 @@ for (const oq of payload.open_questions || []) {
   nextOqId++;
 }
 
-if (!pack.open_questions) pack.open_questions = [];
 pack.open_questions.push(...newOpenQuestions);
 
 // ─── Compute completeness ─────────────────────────────────────────────────────
@@ -303,7 +385,7 @@ pack.open_questions.push(...newOpenQuestions);
 const REQUIRED_FIELDS_MAP = {
   project_core: [
     ["project_core", "premise"],
-    ["project_core", "genre"],
+    ["project_core", "genre_primary"],
     ["project_core", "hook"]
   ],
   world_foundation: [
@@ -389,7 +471,7 @@ function computeCompleteness() {
     ["partial", "sufficient", "locked"].includes(newStatus.plot_frame) &&
     ["partial", "sufficient", "locked"].includes(newStatus.ending_design);
 
-  const unresolvedHighPriority = (pack.open_questions || []).filter(
+  const unresolvedHighPriority = pack.open_questions.filter(
     oq => oq.priority === "high" && !oq.resolved
   ).length;
 
@@ -438,13 +520,12 @@ function computeCompleteness() {
 
 pack.completeness_status = computeCompleteness();
 
-// ─── Version and changelog ─────────────────────────────────────────────────────
+// ─── Version and changelog ────────────────────────────────────────────────────
 
 const previousVersion = pack.version || 0;
 pack.version = previousVersion + 1;
 pack.last_modified = now;
 
-if (!pack.changelog) pack.changelog = [];
 pack.changelog.push({
   version: pack.version,
   timestamp: now,
