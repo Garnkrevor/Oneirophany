@@ -1,0 +1,113 @@
+{
+  "version": 1,
+  "last_modified": "",
+  "changelog": [],
+
+  "project_core": {
+    "title":          { "value": null, "status": "unresolved" },
+    "format":         { "value": null, "status": "unresolved" },
+    "genre":          { "value": null, "status": "unresolved" },
+    "subgenre":       { "value": null, "status": "unresolved" },
+    "premise":        { "value": null, "status": "unresolved" },
+    "hook":           { "value": null, "status": "unresolved" },
+    "audience":       { "value": null, "status": "unresolved" },
+    "market_position":{ "value": null, "status": "unresolved" }
+  },
+
+  "world_foundation": {
+    "setting_type":       { "value": null, "status": "unresolved" },
+    "time_period":        { "value": null, "status": "unresolved" },
+    "primary_location":   { "value": null, "status": "unresolved" },
+    "major_world_rules":  { "value": [], "status": "unresolved" },
+    "power_structures":   { "value": [], "status": "unresolved" },
+    "magic_or_power_system": { "value": null, "status": "unresolved" },
+    "cultures":           { "value": [], "status": "unresolved" },
+    "world_conflicts":    { "value": [], "status": "unresolved" },
+    "secrets":            { "value": [], "status": "unresolved" }
+  },
+
+  "story_engine": {
+    "central_conflict": { "value": null, "status": "unresolved" },
+    "story_question":   { "value": null, "status": "unresolved" },
+    "stakes":           { "value": null, "status": "unresolved" },
+    "themes":           { "value": [], "status": "unresolved" },
+    "hooks":            { "value": [], "status": "unresolved" },
+    "pressure_points":  { "value": [], "status": "unresolved" }
+  },
+
+  "character_system": {
+    "protagonist": {
+      "name":          { "value": null, "status": "unresolved" },
+      "role_summary":  { "value": null, "status": "unresolved" },
+      "external_want": { "value": null, "status": "unresolved" },
+      "internal_need": { "value": null, "status": "unresolved" },
+      "wound":         { "value": null, "status": "unresolved" },
+      "flaw":          { "value": null, "status": "unresolved" },
+      "arc_direction": { "value": null, "status": "unresolved" },
+      "voice_notes":   { "value": null, "status": "unresolved" }
+    },
+    "antagonist_or_opposing_force": {
+      "name":                        { "value": null, "status": "unresolved" },
+      "nature":                      { "value": null, "status": "unresolved" },
+      "role_summary":                { "value": null, "status": "unresolved" },
+      "motivation":                  { "value": null, "status": "unresolved" },
+      "relationship_to_protagonist": { "value": null, "status": "unresolved" }
+    },
+    "supporting_cast": [],
+    "relationship_map": { "value": [], "status": "unresolved" },
+    "factions":         { "value": [], "status": "unresolved" }
+  },
+
+  "plot_frame": {
+    "beginning_state":   { "value": null, "status": "unresolved" },
+    "inciting_incident": { "value": null, "status": "unresolved" },
+    "first_turn":        { "value": null, "status": "unresolved" },
+    "midpoint":          { "value": null, "status": "unresolved" },
+    "darkest_moment":    { "value": null, "status": "unresolved" },
+    "climax":            { "value": null, "status": "unresolved" },
+    "resolution_shape":  { "value": null, "status": "unresolved" },
+    "major_reveals":     { "value": [], "status": "unresolved" },
+    "set_pieces":        { "value": [], "status": "unresolved" }
+  },
+
+  "ending_design": {
+    "ending_summary":          { "value": null, "status": "unresolved" },
+    "final_image":             { "value": null, "status": "unresolved" },
+    "protagonist_final_state": { "value": null, "status": "unresolved" },
+    "relationship_end_states": { "value": [], "status": "unresolved" },
+    "world_state_after":       { "value": null, "status": "unresolved" },
+    "required_payoffs":        { "value": [], "status": "unresolved" },
+    "emotional_ending_feel":   { "value": null, "status": "unresolved" }
+  },
+
+  "author_preferences": {
+    "pov_preference":        { "value": null, "status": "unresolved" },
+    "prose_register":        { "value": null, "status": "unresolved" },
+    "chapter_length_target": { "value": null, "status": "unresolved" },
+    "tense_preference":      { "value": null, "status": "unresolved" },
+    "explicit_inspirations": { "value": [], "status": "unresolved" },
+    "must_include":          { "value": [], "status": "unresolved" },
+    "must_avoid":            { "value": [], "status": "unresolved" },
+    "content_limits":        { "value": null, "status": "unresolved" },
+    "trope_targets":         { "value": [], "status": "unresolved" },
+    "trope_avoids":          { "value": [], "status": "unresolved" },
+    "favorite_elements":     { "value": [], "status": "unresolved" },
+    "non_negotiables":       { "value": [], "status": "unresolved" }
+  },
+
+  "open_questions": [],
+
+  "completeness_status": {
+    "project_core":       "not_started",
+    "world_foundation":   "not_started",
+    "story_engine":       "not_started",
+    "character_system":   "not_started",
+    "plot_frame":         "not_started",
+    "ending_design":      "not_started",
+    "author_preferences": "not_started",
+    "overall":            "not_started",
+    "ready_for_outline":  false,
+    "ready_for_drafting": false,
+    "blocking_issues": []
+  }
+}

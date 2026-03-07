@@ -1,0 +1,268 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "story_foundation_pack",
+  "title": "Story Foundation Pack",
+  "description": "The canonical structured foundation for a book project. This is the source of truth. It is managed by the workflow, not directly by the model.",
+  "type": "object",
+  "required": [
+    "version",
+    "last_modified",
+    "changelog",
+    "project_core",
+    "world_foundation",
+    "story_engine",
+    "character_system",
+    "plot_frame",
+    "ending_design",
+    "author_preferences",
+    "open_questions",
+    "completeness_status"
+  ],
+  "properties": {
+
+    "version": {
+      "type": "integer",
+      "description": "Integer counter incremented on every merge. Starts at 1.",
+      "minimum": 1
+    },
+
+    "last_modified": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp of the last merge."
+    },
+
+    "changelog": {
+      "type": "array",
+      "description": "One entry per merge round. Append-only. Never delete entries.",
+      "items": {
+        "type": "object",
+        "required": ["version", "timestamp", "round_label", "summary"],
+        "properties": {
+          "version": { "type": "integer" },
+          "timestamp": { "type": "string", "format": "date-time" },
+          "round_label": { "type": "string", "description": "Human-readable label, e.g. 'Pass 1 - Concept'" },
+          "summary": { "type": "string", "description": "Brief summary of what changed in this round." },
+          "patches_applied": {
+            "type": "integer",
+            "description": "Number of patches applied in this merge."
+          }
+        }
+      }
+    },
+
+    "project_core": {
+      "type": "object",
+      "description": "Basic identity of the project.",
+      "properties": {
+        "title":     { "$ref": "#/definitions/field_string" },
+        "format":    { "$ref": "#/definitions/field_string", "description": "Novel, novella, series, short story, etc." },
+        "genre":     { "$ref": "#/definitions/field_string" },
+        "subgenre":  { "$ref": "#/definitions/field_string" },
+        "premise":   { "$ref": "#/definitions/field_string", "description": "One or two sentence distillation of what the story is about." },
+        "hook":      { "$ref": "#/definitions/field_string", "description": "The compelling question or tension that draws a reader in." },
+        "audience":  { "$ref": "#/definitions/field_string" },
+        "market_position": { "$ref": "#/definitions/field_string", "description": "Comparable titles or positioning statement." }
+      }
+    },
+
+    "world_foundation": {
+      "type": "object",
+      "description": "The parts of the world that actually affect story.",
+      "properties": {
+        "setting_type":    { "$ref": "#/definitions/field_string", "description": "Secondary world, real-world, historical, near-future, etc." },
+        "time_period":     { "$ref": "#/definitions/field_string" },
+        "primary_location":{ "$ref": "#/definitions/field_string" },
+        "major_world_rules": { "$ref": "#/definitions/field_array", "description": "Rules that constrain or shape what is possible in this world." },
+        "power_structures":  { "$ref": "#/definitions/field_array", "description": "Who has power and how it is organized." },
+        "magic_or_power_system": { "$ref": "#/definitions/field_string" },
+        "cultures":          { "$ref": "#/definitions/field_array" },
+        "world_conflicts":   { "$ref": "#/definitions/field_array", "description": "Macro-level tensions in the world beyond the protagonist's story." },
+        "secrets":           { "$ref": "#/definitions/field_array", "description": "World-level secrets or hidden truths that the story may reveal." }
+      }
+    },
+
+    "story_engine": {
+      "type": "object",
+      "description": "What makes the story move.",
+      "properties": {
+        "central_conflict": { "$ref": "#/definitions/field_string" },
+        "story_question":   { "$ref": "#/definitions/field_string", "description": "The dramatic question the story must answer by its end." },
+        "stakes":           { "$ref": "#/definitions/field_string", "description": "What is lost if the protagonist fails." },
+        "themes":           { "$ref": "#/definitions/field_array" },
+        "hooks":            { "$ref": "#/definitions/field_array", "description": "Narrative hooks that sustain reader interest across the story." },
+        "pressure_points":  { "$ref": "#/definitions/field_array", "description": "Recurring sources of tension or complication." }
+      }
+    },
+
+    "character_system": {
+      "type": "object",
+      "description": "Core cast architecture.",
+      "properties": {
+        "protagonist": {
+          "type": "object",
+          "properties": {
+            "name":             { "$ref": "#/definitions/field_string" },
+            "role_summary":     { "$ref": "#/definitions/field_string" },
+            "external_want":    { "$ref": "#/definitions/field_string", "description": "What they are actively pursuing." },
+            "internal_need":    { "$ref": "#/definitions/field_string", "description": "What they actually need, often in conflict with their want." },
+            "wound":            { "$ref": "#/definitions/field_string", "description": "The backstory injury that shapes their behavior." },
+            "flaw":             { "$ref": "#/definitions/field_string" },
+            "arc_direction":    { "$ref": "#/definitions/field_string", "description": "Positive arc, negative arc, flat arc, etc." },
+            "voice_notes":      { "$ref": "#/definitions/field_string", "description": "How this character sounds and thinks on the page." }
+          }
+        },
+        "antagonist_or_opposing_force": {
+          "type": "object",
+          "properties": {
+            "name":             { "$ref": "#/definitions/field_string" },
+            "nature":           { "$ref": "#/definitions/field_string", "description": "Person, institution, force, internal, etc." },
+            "role_summary":     { "$ref": "#/definitions/field_string" },
+            "motivation":       { "$ref": "#/definitions/field_string" },
+            "relationship_to_protagonist": { "$ref": "#/definitions/field_string" }
+          }
+        },
+        "supporting_cast": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name":         { "$ref": "#/definitions/field_string" },
+              "role_summary": { "$ref": "#/definitions/field_string" },
+              "function":     { "$ref": "#/definitions/field_string", "description": "What narrative job this character performs." }
+            }
+          }
+        },
+        "relationship_map": { "$ref": "#/definitions/field_array", "description": "Key relationships and their tensions." },
+        "factions":         { "$ref": "#/definitions/field_array" }
+      }
+    },
+
+    "plot_frame": {
+      "type": "object",
+      "description": "Structural skeleton. Does not need to be complete before drafting can begin, but gaps should be flagged.",
+      "properties": {
+        "beginning_state":    { "$ref": "#/definitions/field_string", "description": "World and protagonist state at the story's opening." },
+        "inciting_incident":  { "$ref": "#/definitions/field_string", "description": "The event that ruptures the beginning state and forces the story forward." },
+        "first_turn":         { "$ref": "#/definitions/field_string", "description": "The point of no return — protagonist commits to the story's path." },
+        "midpoint":           { "$ref": "#/definitions/field_string", "description": "A major shift in understanding, stakes, or approach at the story's center." },
+        "darkest_moment":     { "$ref": "#/definitions/field_string", "description": "The lowest point. Maximum pressure before the final push." },
+        "climax":             { "$ref": "#/definitions/field_string", "description": "The decisive confrontation or action." },
+        "resolution_shape":   { "$ref": "#/definitions/field_string", "description": "The general shape of what follows the climax." },
+        "major_reveals":      { "$ref": "#/definitions/field_array" },
+        "set_pieces":         { "$ref": "#/definitions/field_array", "description": "Significant scenes or sequences already envisioned." }
+      }
+    },
+
+    "ending_design": {
+      "type": "object",
+      "description": "Explicit ending detail. This section is treated as high priority — a vague ending produces weak writing throughout.",
+      "properties": {
+        "ending_summary":          { "$ref": "#/definitions/field_string" },
+        "final_image":             { "$ref": "#/definitions/field_string", "description": "The last image or moment of the story." },
+        "protagonist_final_state": { "$ref": "#/definitions/field_string" },
+        "relationship_end_states": { "$ref": "#/definitions/field_array", "description": "Where each key relationship ends up." },
+        "world_state_after":       { "$ref": "#/definitions/field_string", "description": "What the world looks like after the climax resolves." },
+        "required_payoffs":        { "$ref": "#/definitions/field_array", "description": "Promises made earlier in the story that must be paid off." },
+        "emotional_ending_feel":   { "$ref": "#/definitions/field_string", "description": "The emotional register of the ending — hopeful, bittersweet, tragic, cathartic, etc." }
+      }
+    },
+
+    "author_preferences": {
+      "type": "object",
+      "description": "Author voice, taste, and hard constraints. This section is critical for Step 3 — it distinguishes the author's voice from generic output.",
+      "properties": {
+        "pov_preference":       { "$ref": "#/definitions/field_string", "description": "First person, third limited, third omniscient, etc." },
+        "prose_register":       { "$ref": "#/definitions/field_string", "description": "Sparse, dense, lyrical, journalistic, colloquial, etc." },
+        "chapter_length_target":{ "$ref": "#/definitions/field_string", "description": "Approximate target word count per chapter." },
+        "tense_preference":     { "$ref": "#/definitions/field_string", "description": "Past tense, present tense." },
+        "explicit_inspirations":{ "$ref": "#/definitions/field_array", "description": "Specific books whose style is a target reference, not just general taste." },
+        "must_include":         { "$ref": "#/definitions/field_array", "description": "Elements the author insists on having in the story." },
+        "must_avoid":           { "$ref": "#/definitions/field_array", "description": "Elements the author will not include under any circumstances." },
+        "content_limits":       { "$ref": "#/definitions/field_string", "description": "Explicit content ceiling — what the author will not write at all." },
+        "trope_targets":        { "$ref": "#/definitions/field_array", "description": "Tropes the author wants to use deliberately." },
+        "trope_avoids":         { "$ref": "#/definitions/field_array", "description": "Tropes the author explicitly does not want." },
+        "favorite_elements":    { "$ref": "#/definitions/field_array" },
+        "non_negotiables":      { "$ref": "#/definitions/field_array", "description": "Hard constraints that override story logic if there is a conflict." }
+      }
+    },
+
+    "open_questions": {
+      "type": "array",
+      "description": "Unresolved issues that still need author input. Managed by the workflow, not the model directly.",
+      "items": {
+        "type": "object",
+        "required": ["id", "question", "section", "priority"],
+        "properties": {
+          "id":       { "type": "string", "description": "Stable identifier, e.g. 'oq_001'." },
+          "question": { "type": "string" },
+          "section":  { "type": "string", "description": "Which section of the pack this question pertains to." },
+          "priority": { "type": "string", "enum": ["high", "medium", "low"] },
+          "added_in_version": { "type": "integer" },
+          "resolved": { "type": "boolean", "default": false }
+        }
+      }
+    },
+
+    "completeness_status": {
+      "type": "object",
+      "description": "Readiness assessment per section. Used to gate Step 3. See docs/completeness_criteria.md for scoring rules.",
+      "properties": {
+        "project_core":     { "$ref": "#/definitions/readiness_level" },
+        "world_foundation": { "$ref": "#/definitions/readiness_level" },
+        "story_engine":     { "$ref": "#/definitions/readiness_level" },
+        "character_system": { "$ref": "#/definitions/readiness_level" },
+        "plot_frame":       { "$ref": "#/definitions/readiness_level" },
+        "ending_design":    { "$ref": "#/definitions/readiness_level" },
+        "author_preferences": { "$ref": "#/definitions/readiness_level" },
+        "overall":          { "$ref": "#/definitions/readiness_level" },
+        "ready_for_outline":   { "type": "boolean" },
+        "ready_for_drafting":  { "type": "boolean" },
+        "blocking_issues":     {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Specific issues preventing advancement to the next stage."
+        }
+      }
+    }
+
+  },
+
+  "definitions": {
+
+    "field_status": {
+      "type": "string",
+      "enum": ["confirmed", "tentative", "unresolved", "superseded"],
+      "description": "confirmed: author has approved this. tentative: raised but not locked in. unresolved: explicitly unknown. superseded: was once confirmed but has since been replaced — kept for history."
+    },
+
+    "field_string": {
+      "type": "object",
+      "required": ["value", "status"],
+      "properties": {
+        "value":      { "type": ["string", "null"] },
+        "status":     { "$ref": "#/definitions/field_status" },
+        "notes":      { "type": "string", "description": "Optional context, caveats, or reasoning." },
+        "set_in_version": { "type": "integer", "description": "Pack version when this value was last set." }
+      }
+    },
+
+    "field_array": {
+      "type": "object",
+      "required": ["value", "status"],
+      "properties": {
+        "value":      { "type": ["array", "null"], "items": { "type": "string" } },
+        "status":     { "$ref": "#/definitions/field_status" },
+        "notes":      { "type": "string" },
+        "set_in_version": { "type": "integer" }
+      }
+    },
+
+    "readiness_level": {
+      "type": "string",
+      "enum": ["not_started", "partial", "sufficient", "locked"],
+      "description": "not_started: no confirmed fields. partial: some confirmed fields but gaps remain. sufficient: enough confirmed content to proceed. locked: author has signed off, do not overwrite."
+    }
+
+  }
+}
