@@ -1,0 +1,887 @@
+{
+  "name": "Oneirophany — Step 3 Writing & Polish (Skeleton)",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "step3-writing-pipeline",
+        "responseMode": "lastNode",
+        "responseData": "allEntries",
+        "httpMethod": "POST",
+        "options": {}
+      },
+      "id": "step3-webhook-node",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [260, 360],
+      "webhookId": "oneirophany-step3-writing-pipeline"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body || $input.first().json;\n\nconst project_id = String(body.project_id || '').trim();\nconst chapter_number = Number(body.chapter_number);\nconst mode = String(body.mode || 'draft').trim();\nconst scene_targets = Array.isArray(body.scene_targets) ? body.scene_targets : [];\nconst focus_notes = String(body.focus_notes || '').trim();\n\nif (!project_id) throw new Error('project_id is required');\nif (!Number.isFinite(chapter_number) || chapter_number < 1) throw new Error('chapter_number must be a positive number');\nif (!['outline', 'draft'].includes(mode)) throw new Error('mode must be outline or draft');\n\nif (!body.story_foundation_pack || typeof body.story_foundation_pack !== 'object') {\n  throw new Error(\n    'Validation failed: story_foundation_pack is missing or not an object. ' +\n    'Send the pack JSON from Step 2 as story_foundation_pack.'\n  );\n}\n\nconst approved_outline = body.approved_outline || null;\nconst scene_cards = Array.isArray(body.scene_cards) ? body.scene_cards : [];\n\nreturn [{ json: { project_id, chapter_number, mode, scene_targets, focus_notes, story_foundation_pack: body.story_foundation_pack, approved_outline, scene_cards } }];"
+      },
+      "id": "step3-validate-intake-node",
+      "name": "Validate Intake",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [500, 360]
+    },
+    {
+      "parameters": {
+        "jsCode": "const req = $('Validate Intake').first().json;\n\nreturn [{\n  json: {\n    ...req,\n    story_foundation_pack: req.story_foundation_pack,\n    approved_outline: req.approved_outline,\n    scene_cards: req.scene_cards\n  }\n}];"
+      },
+      "id": "step3-load-authority-context-node",
+      "name": "Load Authority Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [760, 360]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $('Load Authority Context').first().json;\nconst pack = data.story_foundation_pack || {};\nconst cs = pack.completeness_status || {};\n\nconst readyForOutline = !!cs.ready_for_outline;\nconst readyForDrafting = !!cs.ready_for_drafting;\nconst mode = data.mode;\n\nconst gate_pass = (mode === 'outline') ? readyForOutline : readyForDrafting;\n\nreturn [{\n  json: {\n    ...data,\n    gate_pass,\n    readiness_snapshot: {\n      mode,\n      ready_for_outline: readyForOutline,\n      ready_for_drafting: readyForDrafting,\n      blocking_issues: cs.blocking_issues || []\n    }\n  }\n}];"
+      },
+      "id": "step3-compute-readiness-node",
+      "name": "Compute Readiness",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1020, 360]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "step3-readiness-condition-0",
+              "leftValue": "={{ $json.gate_pass }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "step3-if-readiness-node",
+      "name": "IF Ready For Stage",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1260, 360]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $('Compute Readiness').first().json;\nreturn [{\n  json: {\n    success: false,\n    halted: true,\n    reason: 'Readiness gate failed',\n    mode: d.mode,\n    readiness_snapshot: d.readiness_snapshot\n  }\n}];"
+      },
+      "id": "step3-gate-fail-output-node",
+      "name": "Gate Fail Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1500, 220]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $('Compute Readiness').first().json;\nconst pack = d.story_foundation_pack;\n\nconst compressed_context_pack = {\n  project_core: pack.project_core || {},\n  world_foundation: pack.world_foundation || {},\n  story_engine: pack.story_engine || {},\n  character_system: pack.character_system || {},\n  plot_frame: pack.plot_frame || {},\n  ending_design: pack.ending_design || {},\n  author_preferences: pack.author_preferences || {},\n  approved_outline: d.approved_outline,\n  chapter_target: {\n    chapter_number: d.chapter_number,\n    scene_targets: d.scene_targets,\n    focus_notes: d.focus_notes\n  }\n};\n\nreturn [{ json: { ...d, compressed_context_pack } }];"
+      },
+      "id": "step3-build-context-pack-node",
+      "name": "Build Context Pack",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1500, 500]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $('Build Context Pack').first().json;\nconst system = [\n  'You create chapter blueprints only.',\n  'Return JSON only.',\n  'Do not draft prose in this step.'\n].join('\\n');\n\nconst user = [\n  `Project: ${d.project_id}`,\n  `Chapter: ${d.chapter_number}`,\n  '',\n  'Compressed context pack:',\n  JSON.stringify(d.compressed_context_pack, null, 2),\n  '',\n  'Return blueprint JSON with keys:',\n  '- chapter_objective',\n  '- scene_sequence (array)',\n  '- continuity_requirements (array)',\n  '- pov_tense_voice'\n].join('\\n');\n\nreturn [{\n  json: {\n    ...d,\n    request_body: {\n      model: 'claude-sonnet-4-6',\n      max_tokens: 4096,\n      system,\n      messages: [{ role: 'user', content: user }]\n    }\n  }\n}];"
+      },
+      "id": "step3-build-blueprint-request-node",
+      "name": "Build Blueprint Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1760, 500]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.ANTHROPIC_API_KEY }}"
+            },
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify($input.first().json.request_body) }}",
+        "options": {}
+      },
+      "id": "step3-ai-blueprint-node",
+      "name": "AI: Generate Blueprint",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2020, 500]
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $('AI: Generate Blueprint').first().json;\nconst prev = $('Build Blueprint Request').first().json;\nconst raw = response.content && response.content[0] ? response.content[0].text : '';\nconst cleaned = raw.replace(/^```json\\s*/i, '').replace(/\\s*```$/i, '').trim();\n\nlet blueprint;\ntry {\n  blueprint = JSON.parse(cleaned);\n} catch (e) {\n  return [{ json: { parse_error: true, error_message: 'Blueprint JSON parse failed: ' + e.message, raw_response: raw } }];\n}\n\nreturn [{ json: { parse_error: false, ...prev, chapter_blueprint: blueprint } }];"
+      },
+      "id": "step3-parse-blueprint-node",
+      "name": "Parse Blueprint",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2280, 500]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "step3-blueprint-parse-condition-0",
+              "leftValue": "={{ $json.parse_error }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "step3-if-blueprint-parse-error-node",
+      "name": "IF Blueprint Parse Error",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [2520, 500]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $('Parse Blueprint').first().json;\nreturn [{ json: { success: false, halted: true, reason: d.error_message, raw_response: d.raw_response || null } }];"
+      },
+      "id": "step3-blueprint-parse-fail-output-node",
+      "name": "Blueprint Parse Fail Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2760, 360]
+    },
+    {
+      "parameters": {
+        "amount": 0
+      },
+      "id": "step3-human-gate-blueprint-node",
+      "name": "Human Gate: Blueprint Approval",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [2760, 640]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $('Parse Blueprint').first().json;\n\n// TODO: Replace with real human decision input source.\n// Expected fields from reviewer:\n// approval_status: approved | rejected\n// approval_notes: string\nconst approval_status = 'approved';\nconst approval_notes = 'placeholder';\n\nreturn [{ json: { ...d, approval_status, approval_notes } }];"
+      },
+      "id": "step3-capture-blueprint-decision-node",
+      "name": "Capture Blueprint Decision",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3000, 640]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "step3-blueprint-approval-condition-0",
+              "leftValue": "={{ $json.approval_status }}",
+              "rightValue": "approved",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "step3-if-blueprint-approved-node",
+      "name": "IF Blueprint Approved",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [3240, 640]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $('Capture Blueprint Decision').first().json;\nreturn [{ json: { success: false, halted: true, reason: 'Blueprint rejected', approval_notes: d.approval_notes || '' } }];"
+      },
+      "id": "step3-blueprint-rejected-output-node",
+      "name": "Blueprint Rejected Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3480, 520]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $('Capture Blueprint Decision').first().json;\nconst system = 'Draft chapter prose from approved blueprint only. Return plain text prose.';\nconst user = [\n  `Chapter: ${d.chapter_number}`,\n  'Approved blueprint:',\n  JSON.stringify(d.chapter_blueprint, null, 2),\n  '',\n  'Constraints:',\n  '- Keep canon consistency',\n  '- Match author preferences',\n  '- Preserve required payoffs where applicable'\n].join('\\n');\n\nreturn [{\n  json: {\n    ...d,\n    request_body: {\n      model: 'claude-sonnet-4-6',\n      max_tokens: 8192,\n      system,\n      messages: [{ role: 'user', content: user }]\n    }\n  }\n}];"
+      },
+      "id": "step3-build-draft-request-node",
+      "name": "Build Draft Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3480, 760]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.ANTHROPIC_API_KEY }}"
+            },
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify($input.first().json.request_body) }}",
+        "options": {}
+      },
+      "id": "step3-ai-draft-node",
+      "name": "AI: Draft Prose",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [3740, 760]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $('Build Draft Request').first().json;\nconst r = $('AI: Draft Prose').first().json;\nconst draft_text = r.content && r.content[0] ? String(r.content[0].text || '').trim() : '';\nif (!draft_text) throw new Error('Draft output is empty');\nreturn [{ json: { ...d, draft_text } }];"
+      },
+      "id": "step3-extract-draft-node",
+      "name": "Extract Draft",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [4000, 760]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $('Extract Draft').first().json;\nconst system = [\n  'You are a critique engine.',\n  'Do not rewrite.',\n  'Return JSON only with issue list and fix plan.'\n].join('\\n');\nconst user = [\n  'Draft:',\n  d.draft_text,\n  '',\n  'Return JSON:',\n  '{ issues:[{type,severity,location,description,fix_plan}], summary }'\n].join('\\n');\n\nreturn [{\n  json: {\n    ...d,\n    request_body: {\n      model: 'claude-sonnet-4-6',\n      max_tokens: 4096,\n      system,\n      messages: [{ role: 'user', content: user }]\n    }\n  }\n}];"
+      },
+      "id": "step3-build-critique-request-node",
+      "name": "Build Critique Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [4260, 760]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.ANTHROPIC_API_KEY }}"
+            },
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify($input.first().json.request_body) }}",
+        "options": {}
+      },
+      "id": "step3-ai-critique-node",
+      "name": "AI: Critique Only",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [4520, 760]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $('Build Critique Request').first().json;\nconst r = $('AI: Critique Only').first().json;\nconst raw = r.content && r.content[0] ? r.content[0].text : '';\nconst cleaned = String(raw).replace(/^```json\\s*/i, '').replace(/\\s*```$/i, '').trim();\nlet critique_report;\ntry { critique_report = JSON.parse(cleaned); }\ncatch (e) { throw new Error('Critique parse failed: ' + e.message); }\nreturn [{ json: { ...d, critique_report } }];"
+      },
+      "id": "step3-parse-critique-node",
+      "name": "Parse Critique",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [4780, 760]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $('Parse Critique').first().json;\nconst system = 'Apply fixes from critique report to draft. Return revised draft text only.';\nconst user = [\n  'Original draft:',\n  d.draft_text,\n  '',\n  'Critique report:',\n  JSON.stringify(d.critique_report, null, 2),\n  '',\n  'Apply fix plan and return revised draft only.'\n].join('\\n');\n\nreturn [{\n  json: {\n    ...d,\n    request_body: {\n      model: 'claude-sonnet-4-6',\n      max_tokens: 8192,\n      system,\n      messages: [{ role: 'user', content: user }]\n    }\n  }\n}];"
+      },
+      "id": "step3-build-fix-request-node",
+      "name": "Build Fix Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [5040, 760]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.ANTHROPIC_API_KEY }}"
+            },
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify($input.first().json.request_body) }}",
+        "options": {}
+      },
+      "id": "step3-ai-apply-fixes-node",
+      "name": "AI: Apply Fixes",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [5300, 760]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $('Build Fix Request').first().json;\nconst r = $('AI: Apply Fixes').first().json;\nconst revised_draft = r.content && r.content[0] ? String(r.content[0].text || '').trim() : '';\nif (!revised_draft) throw new Error('Revised draft is empty');\nreturn [{ json: { ...d, revised_draft } }];"
+      },
+      "id": "step3-extract-revised-draft-node",
+      "name": "Extract Revised Draft",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [5560, 760]
+    },
+    {
+      "parameters": {
+        "amount": 0
+      },
+      "id": "step3-human-gate-postfix-node",
+      "name": "Human Gate: Post-Fix Review",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [5820, 760]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $('Extract Revised Draft').first().json;\n\n// TODO: replace with real reviewer decision source\nconst approval_status = 'approved';\nconst approval_notes = 'placeholder';\n\nreturn [{ json: { ...d, post_fix_approval_status: approval_status, post_fix_approval_notes: approval_notes } }];"
+      },
+      "id": "step3-capture-postfix-decision-node",
+      "name": "Capture Post-Fix Decision",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [6060, 760]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "step3-postfix-approval-condition-0",
+              "leftValue": "={{ $json.post_fix_approval_status }}",
+              "rightValue": "approved",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "step3-if-postfix-approved-node",
+      "name": "IF Post-Fix Approved",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [6300, 760]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $('Capture Post-Fix Decision').first().json;\nreturn [{ json: { success: false, halted: true, reason: 'Post-fix review rejected', approval_notes: d.post_fix_approval_notes || '' } }];"
+      },
+      "id": "step3-postfix-rejected-output-node",
+      "name": "Post-Fix Rejected Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [6540, 640]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $('Capture Post-Fix Decision').first().json;\nconst system = 'Final smoothing pass only. Do not alter canon facts or plot outcomes.';\nconst user = [\n  'Revised draft:',\n  d.revised_draft,\n  '',\n  'Perform final smoothing for rhythm and readability only.'\n].join('\\n');\n\nreturn [{\n  json: {\n    ...d,\n    request_body: {\n      model: 'claude-sonnet-4-6',\n      max_tokens: 8192,\n      system,\n      messages: [{ role: 'user', content: user }]\n    }\n  }\n}];"
+      },
+      "id": "step3-build-final-smoothing-request-node",
+      "name": "Build Final Smoothing Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [6540, 900]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.ANTHROPIC_API_KEY }}"
+            },
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify($input.first().json.request_body) }}",
+        "options": {}
+      },
+      "id": "step3-ai-final-smoothing-node",
+      "name": "AI: Final Smoothing",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [6800, 900]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $('Build Final Smoothing Request').first().json;\nconst r = $('AI: Final Smoothing').first().json;\nconst final_draft = r.content && r.content[0] ? String(r.content[0].text || '').trim() : '';\nif (!final_draft) throw new Error('Final smoothing output is empty');\nreturn [{ json: { ...d, final_draft } }];"
+      },
+      "id": "step3-extract-final-draft-node",
+      "name": "Extract Final Draft",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [7060, 900]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $('Extract Final Draft').first().json;\n\n// TODO: Replace with Google Docs/Drive export node(s).\n// This skeleton returns payload only and does not persist externally.\nconst export_record = {\n  project_id: d.project_id,\n  chapter_number: d.chapter_number,\n  exported_at: new Date().toISOString(),\n  final_draft: d.final_draft\n};\n\nreturn [{\n  json: {\n    success: true,\n    project_id: d.project_id,\n    chapter_number: d.chapter_number,\n    mode: d.mode,\n    merge_ready_state: d.readiness_snapshot,\n    blueprint_approval_notes: d.approval_notes || '',\n    post_fix_approval_notes: d.post_fix_approval_notes || '',\n    critique_report: d.critique_report || {},\n    export_record\n  }\n}];"
+      },
+      "id": "step3-export-and-summary-node",
+      "name": "Export + Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [7320, 900]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate Intake",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Intake": {
+      "main": [
+        [
+          {
+            "node": "Load Authority Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Authority Context": {
+      "main": [
+        [
+          {
+            "node": "Compute Readiness",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compute Readiness": {
+      "main": [
+        [
+          {
+            "node": "IF Ready For Stage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Ready For Stage": {
+      "main": [
+        [
+          {
+            "node": "Build Context Pack",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Gate Fail Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Context Pack": {
+      "main": [
+        [
+          {
+            "node": "Build Blueprint Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Blueprint Request": {
+      "main": [
+        [
+          {
+            "node": "AI: Generate Blueprint",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI: Generate Blueprint": {
+      "main": [
+        [
+          {
+            "node": "Parse Blueprint",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Blueprint": {
+      "main": [
+        [
+          {
+            "node": "IF Blueprint Parse Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Blueprint Parse Error": {
+      "main": [
+        [
+          {
+            "node": "Blueprint Parse Fail Output",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Human Gate: Blueprint Approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Human Gate: Blueprint Approval": {
+      "main": [
+        [
+          {
+            "node": "Capture Blueprint Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Capture Blueprint Decision": {
+      "main": [
+        [
+          {
+            "node": "IF Blueprint Approved",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Blueprint Approved": {
+      "main": [
+        [
+          {
+            "node": "Build Draft Request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Blueprint Rejected Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Draft Request": {
+      "main": [
+        [
+          {
+            "node": "AI: Draft Prose",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI: Draft Prose": {
+      "main": [
+        [
+          {
+            "node": "Extract Draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Draft": {
+      "main": [
+        [
+          {
+            "node": "Build Critique Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Critique Request": {
+      "main": [
+        [
+          {
+            "node": "AI: Critique Only",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI: Critique Only": {
+      "main": [
+        [
+          {
+            "node": "Parse Critique",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Critique": {
+      "main": [
+        [
+          {
+            "node": "Build Fix Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Fix Request": {
+      "main": [
+        [
+          {
+            "node": "AI: Apply Fixes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI: Apply Fixes": {
+      "main": [
+        [
+          {
+            "node": "Extract Revised Draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Revised Draft": {
+      "main": [
+        [
+          {
+            "node": "Human Gate: Post-Fix Review",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Human Gate: Post-Fix Review": {
+      "main": [
+        [
+          {
+            "node": "Capture Post-Fix Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Capture Post-Fix Decision": {
+      "main": [
+        [
+          {
+            "node": "IF Post-Fix Approved",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Post-Fix Approved": {
+      "main": [
+        [
+          {
+            "node": "Build Final Smoothing Request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Post-Fix Rejected Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Final Smoothing Request": {
+      "main": [
+        [
+          {
+            "node": "AI: Final Smoothing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI: Final Smoothing": {
+      "main": [
+        [
+          {
+            "node": "Extract Final Draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Final Draft": {
+      "main": [
+        [
+          {
+            "node": "Export + Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true
+  },
+  "active": false,
+  "versionId": "step3-skeleton-version-id",
+  "meta": {
+    "instanceId": "oneirophany-step3-skeleton"
+  },
+  "id": "oneirophany-step3-skeleton",
+  "tags": [
+    {
+      "name": "oneirophany"
+    },
+    {
+      "name": "step3"
+    },
+    {
+      "name": "skeleton"
+    }
+  ]
+}
