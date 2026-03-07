@@ -2,26 +2,82 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "foundation_update_payload",
   "title": "Foundation Update Payload",
-  "description": "The structured output returned by the AI extraction node in Step 2. This is a flat patch list, not a full rewrite of the pack. The merge Code node applies these patches to the canonical story_foundation_pack.",
+  "description": "The structured output returned by the AI extraction node in Step 2. Contains what was learned this round as discrete update records. Does NOT rewrite the full story_foundation_pack — the merge Code node handles that.",
   "type": "object",
-  "required": ["patches", "open_questions", "contradictions", "summary"],
+  "required": ["round_info", "summary", "updates", "open_questions", "contradictions", "author_notes", "completeness_hints"],
   "properties": {
 
-    "patches": {
+    "round_info": {
+      "type": "object",
+      "required": ["round_label", "source_type", "handoff_date"],
+      "properties": {
+        "round_label": {
+          "type": "string",
+          "description": "Human-readable label for this round, e.g. 'Pass 1 - Concept and premise'."
+        },
+        "source_type": {
+          "type": "string",
+          "enum": ["chat", "voice", "notes", "mixed"],
+          "description": "Format of the raw input that was processed."
+        },
+        "handoff_date": {
+          "type": "string",
+          "description": "Date of the interview session, ISO 8601 format (YYYY-MM-DD)."
+        }
+      }
+    },
+
+    "summary": {
+      "type": "string",
+      "description": "Plain-language summary of what was learned this round: what is now clear, what remains uncertain, and what still needs answers."
+    },
+
+    "updates": {
       "type": "array",
-      "description": "A flat list of field updates. Each patch targets one field by dot-path. The merge node applies them in order.",
+      "description": "Discrete update records — one per field that was addressed this round. The merge Code node applies these to the story_foundation_pack.",
       "items": {
         "type": "object",
-        "required": ["path", "value", "status"],
+        "required": ["section", "field", "value", "status"],
         "properties": {
 
-          "path": {
+          "section": {
             "type": "string",
-            "description": "Dot-separated path to the target field within story_foundation_pack. Examples: 'project_core.premise', 'character_system.protagonist.wound', 'author_preferences.pov_preference'."
+            "enum": [
+              "project_core",
+              "world_foundation",
+              "story_engine",
+              "character_system",
+              "plot_frame",
+              "ending_design",
+              "author_preferences"
+            ],
+            "description": "Which section of the story_foundation_pack this update targets."
+          },
+
+          "field": {
+            "type": "string",
+            "description": "The specific field within that section. See field reference below.",
+            "examples": [
+              "premise",
+              "genre_primary",
+              "setting_summary",
+              "central_conflict",
+              "protagonist_name",
+              "protagonist_external_goal",
+              "protagonist_internal_need",
+              "protagonist_wound",
+              "antagonist_nature",
+              "inciting_incident",
+              "ending_summary",
+              "emotional_ending_feel",
+              "must_avoid",
+              "pov_preference",
+              "prose_register"
+            ]
           },
 
           "value": {
-            "description": "The extracted value. Must match the field type — string for field_string, array of strings for field_array.",
+            "description": "The extracted value. String for most fields. Array of strings for list fields (themes, must_avoid, world_rules, etc.). Null only if the author explicitly stated something is absent.",
             "oneOf": [
               { "type": "string" },
               { "type": "array", "items": { "type": "string" } },
@@ -31,20 +87,18 @@
 
           "status": {
             "type": "string",
-            "enum": ["confirmed", "tentative", "unresolved", "superseded"],
-            "description": "Confidence level based on how clearly the author stated this. confirmed = direct statement. tentative = raised as possibility. unresolved = author flagged it as unknown. superseded = author explicitly replaced a prior value."
+            "enum": ["confirmed", "tentative", "superseded"],
+            "description": "confirmed: author stated this clearly and directly. tentative: author hedged or expressed uncertainty. superseded: author explicitly revised a prior statement — include the new value here."
+          },
+
+          "source_quote": {
+            "type": "string",
+            "description": "The line or close paraphrase from the interview that supports this update. Used for debugging and merge audit. Leave empty string if not applicable."
           },
 
           "notes": {
             "type": "string",
-            "description": "Optional. Any context, uncertainty, or reasoning from the extraction that should be preserved."
-          },
-
-          "merge_rule": {
-            "type": "string",
-            "enum": ["overwrite", "append", "skip_if_confirmed"],
-            "default": "skip_if_confirmed",
-            "description": "overwrite: replace regardless of current status. append: for array fields, add new items without removing existing ones. skip_if_confirmed: do not overwrite if the field is already confirmed. Default is skip_if_confirmed."
+            "description": "Optional model note: 'author sounded uncertain', 'revised from earlier version', 'needs follow-up', etc."
           }
 
         }
@@ -53,10 +107,10 @@
 
     "open_questions": {
       "type": "array",
-      "description": "New unresolved questions identified this round. The merge node adds these to the pack's open_questions list. Existing resolved questions are not affected.",
+      "description": "Unresolved questions identified this round. The merge node adds these to the pack's open_questions list.",
       "items": {
         "type": "object",
-        "required": ["question", "section", "priority"],
+        "required": ["question", "section", "priority", "reason"],
         "properties": {
           "question": { "type": "string" },
           "section": {
@@ -75,6 +129,10 @@
           "priority": {
             "type": "string",
             "enum": ["high", "medium", "low"]
+          },
+          "reason": {
+            "type": "string",
+            "description": "One sentence explaining why this question matters for the project."
           }
         }
       }
@@ -82,44 +140,81 @@
 
     "contradictions": {
       "type": "array",
-      "description": "Conflicts detected between the new round input and existing confirmed fields. The merge node logs these and does NOT auto-resolve them. A human must resolve contradictions before the field status can change.",
+      "description": "Conflicts between what was said this round and what is already in the pack. The merge node logs these and does NOT auto-resolve them. Author must resolve before the field can be updated.",
       "items": {
         "type": "object",
-        "required": ["path", "existing_value", "new_value", "description"],
+        "required": ["section", "field", "earlier_value", "new_value", "description", "needs_author_resolution"],
         "properties": {
-          "path":           { "type": "string", "description": "Dot-path of the conflicting field." },
-          "existing_value": { "description": "The current confirmed value in the pack." },
-          "new_value":      { "description": "The conflicting value from the current round." },
-          "description":    { "type": "string", "description": "Plain explanation of why these conflict." }
+          "section":                  { "type": "string" },
+          "field":                    { "type": "string" },
+          "earlier_value":            { "description": "The current confirmed value in the pack." },
+          "new_value":                { "description": "The conflicting value from this round." },
+          "description": {
+            "type": "string",
+            "description": "Plain explanation of why these conflict."
+          },
+          "needs_author_resolution": {
+            "type": "boolean",
+            "default": true
+          }
         }
       }
     },
 
-    "summary": {
-      "type": "string",
-      "description": "A plain-language summary of what was learned this round, what was confirmed, and what remains unclear. Used for the human-readable round summary doc."
-    },
-
-    "suggested_next_questions": {
+    "author_notes": {
       "type": "array",
-      "description": "Optional. The 5-10 best next interview questions, prioritized. The merge node can copy these into the next-questions doc.",
-      "maxItems": 10,
+      "description": "Preferences, constraints, and non-negotiables the author mentioned. These map to the author_preferences section of the pack.",
       "items": {
         "type": "object",
-        "required": ["question", "section", "why"],
+        "required": ["type", "value", "status"],
         "properties": {
-          "question": { "type": "string" },
-          "section":  { "type": "string" },
-          "why":      { "type": "string", "description": "One sentence explaining why this question matters now." }
+          "type": {
+            "type": "string",
+            "enum": ["must_include", "must_avoid", "style_preference", "constraint", "inspiration", "nonnegotiable"]
+          },
+          "value": { "type": "string" },
+          "status": {
+            "type": "string",
+            "enum": ["confirmed", "tentative"]
+          }
         }
       }
     },
 
-    "extraction_confidence": {
-      "type": "string",
-      "enum": ["high", "medium", "low"],
-      "description": "The model's self-assessment of how clearly the source text expressed the extracted information. Low confidence should flag for human review before merging confirmed fields."
+    "completeness_hints": {
+      "type": "object",
+      "description": "The model's read on overall readiness. These are hints only — the merge Code node computes authoritative completeness_status using defined rules.",
+      "required": ["ready_for_outline", "priority_gaps"],
+      "properties": {
+        "ready_for_outline": {
+          "type": "boolean",
+          "description": "Model's assessment of whether the pack is probably ready for outlining."
+        },
+        "priority_gaps": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Plain-language descriptions of the most important missing pieces. Max 5."
+        }
+      }
     }
 
+  },
+
+  "$defs": {
+    "field_reference": {
+      "description": "Field names by section. These are the canonical field identifiers used in the 'field' property of each update record.",
+      "project_core": ["title", "format", "genre_primary", "subgenre", "premise", "hook", "audience", "market_position"],
+      "world_foundation": ["setting_type", "time_period", "primary_location", "major_world_rules", "power_structures", "magic_or_power_system", "cultures", "world_conflicts", "secrets"],
+      "story_engine": ["central_conflict", "story_question", "stakes", "themes", "hooks", "pressure_points", "reader_experience"],
+      "character_system": [
+        "protagonist_name", "protagonist_role_summary", "protagonist_external_goal", "protagonist_internal_need",
+        "protagonist_wound", "protagonist_flaw", "protagonist_arc_direction", "protagonist_voice_notes",
+        "antagonist_name", "antagonist_nature", "antagonist_role_summary", "antagonist_motivation", "antagonist_relationship_to_protagonist",
+        "relationship_map", "factions"
+      ],
+      "plot_frame": ["beginning_state", "inciting_incident", "first_turn", "midpoint", "darkest_moment", "climax", "resolution_shape", "major_reveals", "set_pieces"],
+      "ending_design": ["ending_summary", "final_image", "protagonist_final_state", "relationship_end_states", "world_state_after", "required_payoffs", "emotional_ending_feel"],
+      "author_preferences": ["pov_preference", "prose_register", "chapter_length_target", "tense_preference", "explicit_inspirations", "must_include", "must_avoid", "content_limits", "trope_targets", "trope_avoids", "favorite_elements", "non_negotiables"]
+    }
   }
 }

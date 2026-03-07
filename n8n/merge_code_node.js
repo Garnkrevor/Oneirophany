@@ -1,157 +1,283 @@
 /**
  * Step 2 — Merge Code Node
  *
- * This is the canonical merge logic for the story_foundation_pack.
- * It runs as a Code node in n8n.
+ * Applies a foundation_update_payload to the current story_foundation_pack.
+ * This node governs canon. The model only extracts — this node decides what sticks.
  *
  * Inputs (from previous node):
- *   $input.first().json = { payload, current_pack, round_label }
+ *   $input.first().json = { payload, current_pack }
  *
  *   payload:      foundation_update_payload object (parsed, validated)
  *   current_pack: story_foundation_pack object (loaded from JSON master)
- *   round_label:  string, e.g. "Pass 1 - Concept"
  *
  * Output:
- *   updated story_foundation_pack object
- *
- * Rules:
- *   - Model extracts. This node governs canon.
- *   - Never overwrite a "confirmed" field unless merge_rule is "overwrite".
- *   - Never touch any field in a "locked" section.
- *   - Contradictions are logged, not auto-resolved.
- *   - Changelog is append-only.
+ *   {
+ *     updated_pack:              story_foundation_pack,
+ *     merge_report:              summary of what happened,
+ *     suggested_next_questions:  from payload,
+ *     round_summary:             from payload
+ *   }
  */
 
 const input = $input.first().json;
 const payload = input.payload;
-const pack = JSON.parse(JSON.stringify(input.current_pack)); // deep clone
-const roundLabel = input.round_label || "Unspecified round";
+const pack = JSON.parse(JSON.stringify(input.current_pack)); // deep clone — never mutate the original
 const now = new Date().toISOString();
 
-// ─── Helpers ────────────────────────────────────────────────────────────────
+// ─── Field mapping ────────────────────────────────────────────────────────────
+//
+// Translates payload field names to nested paths within the pack.
+// Most sections are flat: pack[section][field].
+// character_system has nested protagonist / antagonist objects.
+//
+// Format: "section.field" -> ["path", "in", "pack"]
 
-/**
- * Resolve a dot-path string to a nested object reference.
- * Returns { parent, key } so the caller can read or write the field.
- * Returns null if the path is invalid.
- */
-function resolvePath(obj, path) {
-  const parts = path.split(".");
-  let current = obj;
-  for (let i = 0; i < parts.length - 1; i++) {
-    if (current == null || typeof current !== "object") return null;
-    current = current[parts[i]];
+const FIELD_MAP = {
+  // project_core — flat
+  "project_core.title":           ["project_core", "title"],
+  "project_core.format":          ["project_core", "format"],
+  "project_core.genre_primary":   ["project_core", "genre"],
+  "project_core.subgenre":        ["project_core", "subgenre"],
+  "project_core.premise":         ["project_core", "premise"],
+  "project_core.hook":            ["project_core", "hook"],
+  "project_core.audience":        ["project_core", "audience"],
+  "project_core.market_position": ["project_core", "market_position"],
+
+  // world_foundation — flat
+  "world_foundation.setting_type":           ["world_foundation", "setting_type"],
+  "world_foundation.time_period":            ["world_foundation", "time_period"],
+  "world_foundation.primary_location":       ["world_foundation", "primary_location"],
+  "world_foundation.major_world_rules":      ["world_foundation", "major_world_rules"],
+  "world_foundation.power_structures":       ["world_foundation", "power_structures"],
+  "world_foundation.magic_or_power_system":  ["world_foundation", "magic_or_power_system"],
+  "world_foundation.cultures":               ["world_foundation", "cultures"],
+  "world_foundation.world_conflicts":        ["world_foundation", "world_conflicts"],
+  "world_foundation.secrets":                ["world_foundation", "secrets"],
+
+  // story_engine — flat
+  "story_engine.central_conflict":  ["story_engine", "central_conflict"],
+  "story_engine.story_question":    ["story_engine", "story_question"],
+  "story_engine.stakes":            ["story_engine", "stakes"],
+  "story_engine.themes":            ["story_engine", "themes"],
+  "story_engine.hooks":             ["story_engine", "hooks"],
+  "story_engine.pressure_points":   ["story_engine", "pressure_points"],
+  "story_engine.reader_experience": ["story_engine", "reader_experience"],
+
+  // character_system — nested protagonist
+  "character_system.protagonist_name":          ["character_system", "protagonist", "name"],
+  "character_system.protagonist_role_summary":  ["character_system", "protagonist", "role_summary"],
+  "character_system.protagonist_external_goal": ["character_system", "protagonist", "external_want"],
+  "character_system.protagonist_internal_need": ["character_system", "protagonist", "internal_need"],
+  "character_system.protagonist_wound":         ["character_system", "protagonist", "wound"],
+  "character_system.protagonist_flaw":          ["character_system", "protagonist", "flaw"],
+  "character_system.protagonist_arc_direction": ["character_system", "protagonist", "arc_direction"],
+  "character_system.protagonist_voice_notes":   ["character_system", "protagonist", "voice_notes"],
+
+  // character_system — nested antagonist
+  "character_system.antagonist_name":                        ["character_system", "antagonist_or_opposing_force", "name"],
+  "character_system.antagonist_nature":                      ["character_system", "antagonist_or_opposing_force", "nature"],
+  "character_system.antagonist_role_summary":                ["character_system", "antagonist_or_opposing_force", "role_summary"],
+  "character_system.antagonist_motivation":                  ["character_system", "antagonist_or_opposing_force", "motivation"],
+  "character_system.antagonist_relationship_to_protagonist": ["character_system", "antagonist_or_opposing_force", "relationship_to_protagonist"],
+
+  // character_system — other
+  "character_system.relationship_map": ["character_system", "relationship_map"],
+  "character_system.factions":         ["character_system", "factions"],
+
+  // plot_frame — flat
+  "plot_frame.beginning_state":   ["plot_frame", "beginning_state"],
+  "plot_frame.inciting_incident": ["plot_frame", "inciting_incident"],
+  "plot_frame.first_turn":        ["plot_frame", "first_turn"],
+  "plot_frame.midpoint":          ["plot_frame", "midpoint"],
+  "plot_frame.darkest_moment":    ["plot_frame", "darkest_moment"],
+  "plot_frame.climax":            ["plot_frame", "climax"],
+  "plot_frame.resolution_shape":  ["plot_frame", "resolution_shape"],
+  "plot_frame.major_reveals":     ["plot_frame", "major_reveals"],
+  "plot_frame.set_pieces":        ["plot_frame", "set_pieces"],
+
+  // ending_design — flat
+  "ending_design.ending_summary":          ["ending_design", "ending_summary"],
+  "ending_design.final_image":             ["ending_design", "final_image"],
+  "ending_design.protagonist_final_state": ["ending_design", "protagonist_final_state"],
+  "ending_design.relationship_end_states": ["ending_design", "relationship_end_states"],
+  "ending_design.world_state_after":       ["ending_design", "world_state_after"],
+  "ending_design.required_payoffs":        ["ending_design", "required_payoffs"],
+  "ending_design.emotional_ending_feel":   ["ending_design", "emotional_ending_feel"],
+
+  // author_preferences — flat
+  "author_preferences.pov_preference":        ["author_preferences", "pov_preference"],
+  "author_preferences.prose_register":        ["author_preferences", "prose_register"],
+  "author_preferences.chapter_length_target": ["author_preferences", "chapter_length_target"],
+  "author_preferences.tense_preference":      ["author_preferences", "tense_preference"],
+  "author_preferences.explicit_inspirations": ["author_preferences", "explicit_inspirations"],
+  "author_preferences.must_include":          ["author_preferences", "must_include"],
+  "author_preferences.must_avoid":            ["author_preferences", "must_avoid"],
+  "author_preferences.content_limits":        ["author_preferences", "content_limits"],
+  "author_preferences.trope_targets":         ["author_preferences", "trope_targets"],
+  "author_preferences.trope_avoids":          ["author_preferences", "trope_avoids"],
+  "author_preferences.favorite_elements":     ["author_preferences", "favorite_elements"],
+  "author_preferences.non_negotiables":       ["author_preferences", "non_negotiables"]
+};
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function resolvePackPath(pathParts) {
+  let cursor = pack;
+  for (let i = 0; i < pathParts.length - 1; i++) {
+    if (cursor == null || typeof cursor !== "object") return null;
+    cursor = cursor[pathParts[i]];
   }
-  if (current == null || typeof current !== "object") return null;
-  return { parent: current, key: parts[parts.length - 1] };
+  if (cursor == null || typeof cursor !== "object") return null;
+  return { parent: cursor, key: pathParts[pathParts.length - 1] };
 }
 
-/**
- * Get the current status of a field at a given path.
- * Returns null if field doesn't exist.
- */
-function getFieldStatus(obj, path) {
-  const ref = resolvePath(obj, path);
-  if (!ref) return null;
-  const field = ref.parent[ref.key];
-  if (field == null || typeof field !== "object") return null;
-  return field.status || null;
+function getSectionStatus(sectionName) {
+  return pack.completeness_status && pack.completeness_status[sectionName];
 }
 
-/**
- * Get the top-level section name from a dot-path.
- * e.g. "character_system.protagonist.name" -> "character_system"
- */
-function getSectionName(path) {
-  return path.split(".")[0];
+function isArrayField(value) {
+  const field = typeof value === "object" && value !== null ? value : null;
+  return field && Array.isArray(field.value);
 }
 
-/**
- * Check whether a section is locked.
- * A section is locked if completeness_status[section] === "locked".
- */
-function isSectionLocked(pack, sectionName) {
-  const status = pack.completeness_status;
-  if (!status) return false;
-  return status[sectionName] === "locked";
-}
+// ─── Tracking ─────────────────────────────────────────────────────────────────
 
-// ─── Tracking ────────────────────────────────────────────────────────────────
-
-let patchesApplied = 0;
-const skippedPatches = [];
+let updatesApplied = 0;
+const skipped = [];
 const lockedSkips = [];
 const contradictionsLogged = [];
 const newOpenQuestions = [];
+const authorNotesApplied = [];
 
-// ─── Apply Patches ───────────────────────────────────────────────────────────
+// ─── Apply updates ─────────────────────────────────────────────────────────────
 
-for (const patch of payload.patches || []) {
-  const { path, value, status, notes, merge_rule } = patch;
-  const rule = merge_rule || "skip_if_confirmed";
+for (const update of payload.updates || []) {
+  const { section, field, value, status, source_quote, notes } = update;
+  const mapKey = `${section}.${field}`;
+  const pathParts = FIELD_MAP[mapKey];
 
-  const sectionName = getSectionName(path);
-
-  // Hard stop: never touch locked sections
-  if (isSectionLocked(pack, sectionName)) {
-    lockedSkips.push({ path, reason: `Section "${sectionName}" is locked` });
+  // Unknown field — log and skip
+  if (!pathParts) {
+    skipped.push({ section, field, reason: `No mapping found for "${mapKey}"` });
     continue;
   }
 
-  const ref = resolvePath(pack, path);
+  // Hard stop: never touch locked sections
+  if (getSectionStatus(section) === "locked") {
+    lockedSkips.push({ section, field, reason: `Section "${section}" is locked` });
+    continue;
+  }
 
+  const ref = resolvePackPath(pathParts);
   if (!ref) {
-    // Path doesn't exist in the pack — could be a schema mismatch or new field
-    // Log it but don't crash
-    skippedPatches.push({ path, reason: "Path not found in pack" });
+    skipped.push({ section, field, reason: `Path not found in pack: ${pathParts.join(".")}` });
     continue;
   }
 
   const currentField = ref.parent[ref.key];
   const currentStatus = currentField && currentField.status ? currentField.status : "unresolved";
 
-  // skip_if_confirmed: do not overwrite confirmed fields
-  if (rule === "skip_if_confirmed" && currentStatus === "confirmed") {
-    skippedPatches.push({
-      path,
-      reason: `Field is confirmed, merge_rule is skip_if_confirmed`
-    });
-    continue;
-  }
+  // Merge rules by status:
+  //   confirmed  → fill blank / overwrite tentative / overwrite superseded / do NOT overwrite confirmed
+  //   tentative  → fill blank or tentative only, never overwrite confirmed
+  //   superseded → update field, mark previous context in notes
 
-  // append: for array fields, merge new items without removing existing
-  if (rule === "append") {
-    const existing = currentField && Array.isArray(currentField.value) ? currentField.value : [];
-    const incoming = Array.isArray(value) ? value : (value ? [value] : []);
-    const merged = Array.from(new Set([...existing, ...incoming]));
+  if (status === "confirmed") {
+    if (currentStatus === "confirmed") {
+      // Do not silently overwrite. Log as potential contradiction for human review.
+      if (JSON.stringify(currentField.value) !== JSON.stringify(value)) {
+        contradictionsLogged.push({
+          section,
+          field,
+          earlier_value: currentField.value,
+          new_value: value,
+          description: `New confirmed value differs from existing confirmed value. Author review required.`,
+          needs_author_resolution: true
+        });
+        skipped.push({ section, field, reason: "Confirmed field conflict — logged as contradiction, not overwritten" });
+      } else {
+        skipped.push({ section, field, reason: "Value unchanged — skipped" });
+      }
+      continue;
+    }
+  } else if (status === "tentative") {
+    if (currentStatus === "confirmed") {
+      skipped.push({ section, field, reason: "Cannot overwrite confirmed field with tentative value" });
+      continue;
+    }
+  }
+  // superseded: apply regardless of current status
+
+  // For array fields: merge new items with existing, dedupe
+  if (Array.isArray(value) && isArrayField(currentField)) {
+    const existing = Array.isArray(currentField.value) ? currentField.value : [];
+    const merged = Array.from(new Set([...existing, ...value]));
     ref.parent[ref.key] = {
       value: merged,
-      status: status,
+      status,
+      ...(source_quote ? { source_quote } : {}),
       ...(notes ? { notes } : {}),
       set_in_version: (pack.version || 0) + 1
     };
-    patchesApplied++;
+  } else {
+    ref.parent[ref.key] = {
+      value,
+      status,
+      ...(source_quote ? { source_quote } : {}),
+      ...(notes ? { notes } : {}),
+      set_in_version: (pack.version || 0) + 1
+    };
+  }
+
+  updatesApplied++;
+}
+
+// ─── Merge author_notes into author_preferences ───────────────────────────────
+//
+// author_notes from the payload are preference/constraint statements.
+// Map them to the appropriate list field in author_preferences.
+
+const AUTHOR_NOTE_TYPE_MAP = {
+  must_include:      "must_include",
+  must_avoid:        "must_avoid",
+  style_preference:  "favorite_elements",
+  constraint:        "non_negotiables",
+  inspiration:       "explicit_inspirations",
+  nonnegotiable:     "non_negotiables"
+};
+
+for (const note of payload.author_notes || []) {
+  const packField = AUTHOR_NOTE_TYPE_MAP[note.type];
+  if (!packField) continue;
+
+  const ref = resolvePackPath(["author_preferences", packField]);
+  if (!ref) continue;
+
+  const currentField = ref.parent[ref.key];
+  if (currentField && ref.parent[ref.key].status === "confirmed" && note.status === "tentative") {
+    skipped.push({ section: "author_preferences", field: packField, reason: "Cannot overwrite confirmed with tentative author note" });
     continue;
   }
 
-  // overwrite or skip_if_confirmed (where field is not confirmed): apply normally
-  ref.parent[ref.key] = {
-    value: value,
-    status: status,
-    ...(notes ? { notes } : {}),
-    set_in_version: (pack.version || 0) + 1
-  };
-  patchesApplied++;
+  const existing = currentField && Array.isArray(currentField.value) ? currentField.value : [];
+  if (!existing.includes(note.value)) {
+    ref.parent[ref.key] = {
+      value: [...existing, note.value],
+      status: note.status,
+      set_in_version: (pack.version || 0) + 1
+    };
+    authorNotesApplied.push(note);
+    updatesApplied++;
+  }
 }
 
-// ─── Log Contradictions ──────────────────────────────────────────────────────
+// ─── Log contradictions from payload ─────────────────────────────────────────
 
-for (const contradiction of payload.contradictions || []) {
-  // Do not auto-resolve. Log for human review.
-  contradictionsLogged.push(contradiction);
+for (const c of payload.contradictions || []) {
+  contradictionsLogged.push(c);
 }
 
-// ─── Add Open Questions ──────────────────────────────────────────────────────
+// ─── Add open questions ───────────────────────────────────────────────────────
 
 let nextOqId = (pack.open_questions || []).length + 1;
 
@@ -162,6 +288,7 @@ for (const oq of payload.open_questions || []) {
     question: oq.question,
     section: oq.section,
     priority: oq.priority,
+    reason: oq.reason || "",
     added_in_version: (pack.version || 0) + 1,
     resolved: false
   });
@@ -171,66 +298,60 @@ for (const oq of payload.open_questions || []) {
 if (!pack.open_questions) pack.open_questions = [];
 pack.open_questions.push(...newOpenQuestions);
 
-// ─── Compute Completeness ────────────────────────────────────────────────────
+// ─── Compute completeness ─────────────────────────────────────────────────────
 
-/**
- * Required fields per section (must be "confirmed" for section to be "sufficient").
- * Arrays count as sufficient if they have at least 1 confirmed item.
- */
-const REQUIRED_FIELDS = {
+const REQUIRED_FIELDS_MAP = {
   project_core: [
-    "project_core.premise",
-    "project_core.genre",
-    "project_core.hook"
+    ["project_core", "premise"],
+    ["project_core", "genre"],
+    ["project_core", "hook"]
   ],
   world_foundation: [
-    "world_foundation.setting_type",
-    "world_foundation.major_world_rules"
+    ["world_foundation", "setting_type"],
+    ["world_foundation", "major_world_rules"]
   ],
   story_engine: [
-    "story_engine.central_conflict",
-    "story_engine.story_question",
-    "story_engine.stakes"
+    ["story_engine", "central_conflict"],
+    ["story_engine", "story_question"],
+    ["story_engine", "stakes"]
   ],
   character_system: [
-    "character_system.protagonist.name",
-    "character_system.protagonist.external_want",
-    "character_system.protagonist.internal_need",
-    "character_system.protagonist.wound",
-    "character_system.antagonist_or_opposing_force.nature",
-    "character_system.antagonist_or_opposing_force.role_summary"
+    ["character_system", "protagonist", "name"],
+    ["character_system", "protagonist", "external_want"],
+    ["character_system", "protagonist", "internal_need"],
+    ["character_system", "protagonist", "wound"],
+    ["character_system", "antagonist_or_opposing_force", "nature"],
+    ["character_system", "antagonist_or_opposing_force", "role_summary"]
   ],
   plot_frame: [
-    "plot_frame.beginning_state",
-    "plot_frame.inciting_incident",
-    "plot_frame.first_turn",
-    "plot_frame.climax"
+    ["plot_frame", "beginning_state"],
+    ["plot_frame", "inciting_incident"],
+    ["plot_frame", "first_turn"],
+    ["plot_frame", "climax"]
   ],
   ending_design: [
-    "ending_design.ending_summary",
-    "ending_design.emotional_ending_feel",
-    "ending_design.required_payoffs"
+    ["ending_design", "ending_summary"],
+    ["ending_design", "emotional_ending_feel"],
+    ["ending_design", "required_payoffs"]
   ],
   author_preferences: [
-    "author_preferences.pov_preference",
-    "author_preferences.prose_register"
+    ["author_preferences", "pov_preference"],
+    ["author_preferences", "prose_register"]
   ]
 };
 
-function assessSection(pack, sectionName) {
+function assessSection(sectionName) {
   const current = pack.completeness_status[sectionName];
-  if (current === "locked") return "locked"; // never downgrade a locked section
+  if (current === "locked") return "locked";
 
-  const required = REQUIRED_FIELDS[sectionName] || [];
+  const required = REQUIRED_FIELDS_MAP[sectionName] || [];
   let confirmedCount = 0;
 
-  for (const fieldPath of required) {
-    const ref = resolvePath(pack, fieldPath);
+  for (const pathParts of required) {
+    const ref = resolvePackPath(pathParts);
     if (!ref) continue;
     const field = ref.parent[ref.key];
     if (!field) continue;
-
-    // For array fields, confirmed means status is confirmed AND value has at least 1 item
     if (Array.isArray(field.value)) {
       if (field.status === "confirmed" && field.value.length > 0) confirmedCount++;
     } else {
@@ -243,16 +364,15 @@ function assessSection(pack, sectionName) {
   return "sufficient";
 }
 
-function computeCompleteness(pack) {
-  const sections = Object.keys(REQUIRED_FIELDS);
+function computeCompleteness() {
+  const sections = Object.keys(REQUIRED_FIELDS_MAP);
   const newStatus = { ...pack.completeness_status };
   const blockingIssues = [];
 
   for (const section of sections) {
-    newStatus[section] = assessSection(pack, section);
+    newStatus[section] = assessSection(section);
   }
 
-  // Compute overall
   const levels = sections.map(s => newStatus[s]);
   if (levels.every(l => l === "not_started")) {
     newStatus.overall = "not_started";
@@ -262,15 +382,13 @@ function computeCompleteness(pack) {
     newStatus.overall = "partial";
   }
 
-  // Gate: ready_for_outline
   const outlineReady =
     (newStatus.project_core === "sufficient" || newStatus.project_core === "locked") &&
     (newStatus.story_engine === "sufficient" || newStatus.story_engine === "locked") &&
     (newStatus.character_system === "sufficient" || newStatus.character_system === "locked") &&
-    (newStatus.plot_frame === "partial" || newStatus.plot_frame === "sufficient" || newStatus.plot_frame === "locked") &&
-    (newStatus.ending_design === "partial" || newStatus.ending_design === "sufficient" || newStatus.ending_design === "locked");
+    ["partial", "sufficient", "locked"].includes(newStatus.plot_frame) &&
+    ["partial", "sufficient", "locked"].includes(newStatus.ending_design);
 
-  // Gate: ready_for_drafting
   const unresolvedHighPriority = (pack.open_questions || []).filter(
     oq => oq.priority === "high" && !oq.resolved
   ).length;
@@ -286,26 +404,25 @@ function computeCompleteness(pack) {
   newStatus.ready_for_outline = outlineReady;
   newStatus.ready_for_drafting = draftingReady;
 
-  // Blocking issues
   if (!outlineReady) {
-    for (const section of ["project_core", "story_engine", "character_system"]) {
-      if (newStatus[section] !== "sufficient" && newStatus[section] !== "locked") {
-        blockingIssues.push(`${section} is ${newStatus[section]} — required for outline`);
+    for (const s of ["project_core", "story_engine", "character_system"]) {
+      if (newStatus[s] !== "sufficient" && newStatus[s] !== "locked") {
+        blockingIssues.push(`${s} is ${newStatus[s]} — required for outline`);
       }
     }
     if (!["partial", "sufficient", "locked"].includes(newStatus.ending_design)) {
-      blockingIssues.push("ending_design has no confirmed content — at least ending_summary is required");
+      blockingIssues.push("ending_design has no content — at least ending_summary required");
     }
   }
 
   if (!draftingReady && outlineReady) {
-    for (const section of ["world_foundation", "plot_frame", "ending_design", "author_preferences"]) {
-      if (newStatus[section] !== "sufficient" && newStatus[section] !== "locked") {
-        blockingIssues.push(`${section} is ${newStatus[section]} — required for drafting`);
+    for (const s of ["world_foundation", "plot_frame", "ending_design", "author_preferences"]) {
+      if (newStatus[s] !== "sufficient" && newStatus[s] !== "locked") {
+        blockingIssues.push(`${s} is ${newStatus[s]} — required for drafting`);
       }
     }
     if (unresolvedHighPriority > 0) {
-      blockingIssues.push(`${unresolvedHighPriority} high-priority open question(s) remain unresolved`);
+      blockingIssues.push(`${unresolvedHighPriority} high-priority open question(s) unresolved`);
     }
   }
 
@@ -319,9 +436,9 @@ function computeCompleteness(pack) {
   return newStatus;
 }
 
-pack.completeness_status = computeCompleteness(pack);
+pack.completeness_status = computeCompleteness();
 
-// ─── Version and Changelog ───────────────────────────────────────────────────
+// ─── Version and changelog ─────────────────────────────────────────────────────
 
 const previousVersion = pack.version || 0;
 pack.version = previousVersion + 1;
@@ -331,31 +448,32 @@ if (!pack.changelog) pack.changelog = [];
 pack.changelog.push({
   version: pack.version,
   timestamp: now,
-  round_label: roundLabel,
+  round_label: payload.round_info ? payload.round_info.round_label : "Unknown round",
   summary: payload.summary || "No summary provided.",
-  patches_applied: patchesApplied
+  patches_applied: updatesApplied
 });
 
-// ─── Output ──────────────────────────────────────────────────────────────────
+// ─── Output ───────────────────────────────────────────────────────────────────
 
 return [{
   json: {
     updated_pack: pack,
     merge_report: {
       version: pack.version,
-      patches_applied: patchesApplied,
-      patches_skipped: skippedPatches.length,
+      updates_applied: updatesApplied,
+      updates_skipped: skipped.length,
       locked_skips: lockedSkips.length,
       contradictions_logged: contradictionsLogged.length,
       new_open_questions: newOpenQuestions.length,
+      author_notes_applied: authorNotesApplied.length,
       ready_for_outline: pack.completeness_status.ready_for_outline,
       ready_for_drafting: pack.completeness_status.ready_for_drafting,
       blocking_issues: pack.completeness_status.blocking_issues,
-      skipped_patches: skippedPatches,
+      skipped,
       locked_skips: lockedSkips,
       contradictions: contradictionsLogged
     },
-    suggested_next_questions: payload.suggested_next_questions || [],
+    completeness_hints: payload.completeness_hints || {},
     round_summary: payload.summary || ""
   }
 }];

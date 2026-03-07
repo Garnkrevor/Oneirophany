@@ -125,17 +125,17 @@ This node reads the normalized text, compares it against the current pack, and r
 ```
 You are a structured data extractor for a story development system.
 
-Your job is to read the author's statements from this round and extract updates to the story foundation pack.
+Your job is to read the author's statements from this round and extract updates to the story_foundation_pack as a foundation_update_payload.
 
 Critical rules:
 - Only extract information the author actually stated. Do not invent, infer, or embellish.
+- Do not infer themes, symbolism, or meaning unless the author explicitly stated them.
 - If something is stated clearly and directly, mark status as "confirmed".
 - If something is stated with hedging language (maybe, possibly, I think, I'm not sure), mark status as "tentative".
-- If the author explicitly says they don't know something, mark status as "unresolved".
-- If the author changes something they previously said, mark the patch with status "superseded" and include the new value.
-- Do not include patches for fields where nothing new was said.
-- For contradictions: if the new input conflicts with an existing confirmed field, log it in the contradictions array. Do not auto-resolve it.
-- extraction_confidence should reflect how clearly expressed the source material was overall.
+- If the author changes something they previously stated, mark status as "superseded" and include the new value.
+- Do not include update records for fields where nothing new was said this round.
+- For contradictions: if the new input conflicts with an existing confirmed field in the pack, log it in the contradictions array. Do not auto-resolve it. Do not overwrite the confirmed field.
+- For author preferences and constraints (must avoid, must include, style preferences, inspirations), put them in author_notes, not in updates.
 
 Current story_foundation_pack:
 ---
@@ -147,13 +147,63 @@ Normalized round input:
 {{normalized_text}}
 ---
 
-Return a foundation_update_payload JSON object matching this schema:
-- patches: array of { path, value, status, notes?, merge_rule? }
-- open_questions: array of { question, section, priority }
-- contradictions: array of { path, existing_value, new_value, description }
-- summary: string
-- suggested_next_questions: array of { question, section, why } (max 10)
-- extraction_confidence: "high" | "medium" | "low"
+Return a foundation_update_payload JSON object with this structure:
+{
+  "round_info": {
+    "round_label": "string — e.g. Pass 1 - Concept and premise",
+    "source_type": "chat|voice|notes|mixed",
+    "handoff_date": "YYYY-MM-DD"
+  },
+  "summary": "string — plain summary of what was learned this round",
+  "updates": [
+    {
+      "section": "project_core|world_foundation|story_engine|character_system|plot_frame|ending_design|author_preferences",
+      "field": "string — exact field name from the field reference below",
+      "value": "string, array of strings, or null",
+      "status": "confirmed|tentative|superseded",
+      "source_quote": "string — the author's words that support this",
+      "notes": "string — optional model note"
+    }
+  ],
+  "open_questions": [
+    {
+      "question": "string",
+      "section": "string",
+      "priority": "high|medium|low",
+      "reason": "string — one sentence why this matters"
+    }
+  ],
+  "contradictions": [
+    {
+      "section": "string",
+      "field": "string",
+      "earlier_value": "the existing confirmed value",
+      "new_value": "the conflicting new value",
+      "description": "string",
+      "needs_author_resolution": true
+    }
+  ],
+  "author_notes": [
+    {
+      "type": "must_include|must_avoid|style_preference|constraint|inspiration|nonnegotiable",
+      "value": "string",
+      "status": "confirmed|tentative"
+    }
+  ],
+  "completeness_hints": {
+    "ready_for_outline": false,
+    "priority_gaps": ["string — max 5 items"]
+  }
+}
+
+Field reference by section:
+- project_core: title, format, genre_primary, subgenre, premise, hook, audience, market_position
+- world_foundation: setting_type, time_period, primary_location, major_world_rules, power_structures, magic_or_power_system, cultures, world_conflicts, secrets
+- story_engine: central_conflict, story_question, stakes, themes, hooks, pressure_points, reader_experience
+- character_system: protagonist_name, protagonist_role_summary, protagonist_external_goal, protagonist_internal_need, protagonist_wound, protagonist_flaw, protagonist_arc_direction, protagonist_voice_notes, antagonist_name, antagonist_nature, antagonist_role_summary, antagonist_motivation, antagonist_relationship_to_protagonist, relationship_map, factions
+- plot_frame: beginning_state, inciting_incident, first_turn, midpoint, darkest_moment, climax, resolution_shape, major_reveals, set_pieces
+- ending_design: ending_summary, final_image, protagonist_final_state, relationship_end_states, world_state_after, required_payoffs, emotional_ending_feel
+- author_preferences: pov_preference, prose_register, chapter_length_target, tense_preference, explicit_inspirations, must_include, must_avoid, content_limits, trope_targets, trope_avoids, favorite_elements, non_negotiables
 
 Return only valid JSON. No explanation text outside the JSON object.
 ```
@@ -215,10 +265,14 @@ This is the most important node in the workflow. It is the canonical source of t
 See `n8n/merge_code_node.js` for the full implementation.
 
 Key behaviors:
-- Applies patches in order
-- Respects `merge_rule` per patch (default: `skip_if_confirmed`)
+- Applies `updates` array records in order using section/field mapping
+- confirmed overwrites tentative/superseded/unresolved; does not overwrite confirmed (logs contradiction instead)
+- tentative only fills blank or tentative fields; never overwrites confirmed
+- superseded applies regardless of current status
+- Array fields merge new items with existing, deduped
+- `author_notes` from payload are mapped into `author_preferences` list fields
 - Does not overwrite `locked` sections under any circumstances
-- Appends new `open_questions` with generated IDs
+- Appends new `open_questions` with generated IDs and `reason` field
 - Logs contradictions without auto-resolving them
 - Increments `version`, updates `last_modified`, appends to `changelog`
 - Computes `completeness_status` using rules from `docs/completeness_criteria.md`
