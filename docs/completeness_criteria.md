@@ -27,7 +27,7 @@ These are the minimum fields that must be `confirmed` for a section to reach `su
 
 Required for `sufficient`:
 - `premise`
-- `genre`
+- `genre_primary`
 - `hook`
 
 Optional but strongly encouraged:

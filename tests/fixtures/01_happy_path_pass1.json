@@ -1,0 +1,111 @@
+{
+  "description": "Pass 1 happy path — confirms core premise, genre, hook, reader experience, protagonist name and goal, plus two author notes. Starting from blank template.",
+  "starting_pack": null,
+  "payload": {
+    "round_info": {
+      "round_label": "Pass 1 - Concept and premise",
+      "source_type": "chat",
+      "handoff_date": "2026-03-07"
+    },
+    "summary": "Strong premise. Genre and hook are clear. Protagonist name and external goal established. Ending still vague. Author has two hard avoids.",
+    "updates": [
+      {
+        "section": "project_core",
+        "field": "genre_primary",
+        "value": "dark fantasy",
+        "status": "confirmed",
+        "source_quote": "It's definitely dark fantasy.",
+        "notes": ""
+      },
+      {
+        "section": "project_core",
+        "field": "premise",
+        "value": "A disgraced knight escorts a girl tied to a dead god across a fractured kingdom.",
+        "status": "confirmed",
+        "source_quote": "It's about a disgraced knight escorting a girl tied to a dead god.",
+        "notes": ""
+      },
+      {
+        "section": "project_core",
+        "field": "hook",
+        "value": "Why is a disgraced man the only one standing between a dead god and the living world?",
+        "status": "confirmed",
+        "source_quote": "The hook is why a disgraced man ends up being the one who has to do this.",
+        "notes": ""
+      },
+      {
+        "section": "story_engine",
+        "field": "reader_experience",
+        "value": "grim, intimate, and tense — but still emotionally human",
+        "status": "confirmed",
+        "source_quote": "I want it to feel grim and intimate but still human.",
+        "notes": ""
+      },
+      {
+        "section": "character_system",
+        "field": "protagonist_name",
+        "value": "Aldric",
+        "status": "confirmed",
+        "source_quote": "His name is Aldric.",
+        "notes": ""
+      },
+      {
+        "section": "character_system",
+        "field": "protagonist_external_goal",
+        "value": "Complete the escort and collect payment",
+        "status": "confirmed",
+        "source_quote": "He just wants to finish the job and get paid.",
+        "notes": ""
+      }
+    ],
+    "open_questions": [
+      {
+        "question": "What exactly caused Aldric's disgrace?",
+        "section": "character_system",
+        "priority": "high",
+        "reason": "Central to protagonist motivation and identity."
+      },
+      {
+        "question": "Does the girl understand her connection to the dead god?",
+        "section": "character_system",
+        "priority": "high",
+        "reason": "Affects character dynamic and the mystery structure."
+      },
+      {
+        "question": "How does the story end in broad terms?",
+        "section": "ending_design",
+        "priority": "high",
+        "reason": "Ending clarity is essential for outlining and drafting."
+      }
+    ],
+    "contradictions": [],
+    "author_notes": [
+      {
+        "type": "must_avoid",
+        "value": "No chosen-one prophecy framing.",
+        "status": "confirmed"
+      },
+      {
+        "type": "style_preference",
+        "value": "Avoid overly ornate prose — keep it spare.",
+        "status": "confirmed"
+      }
+    ],
+    "completeness_hints": {
+      "ready_for_outline": false,
+      "priority_gaps": [
+        "Protagonist backstory unclear",
+        "Ending still vague",
+        "Opposing force not yet defined"
+      ]
+    }
+  },
+  "expected": {
+    "updates_applied": 8,
+    "contradictions_logged": 0,
+    "new_open_questions": 3,
+    "ready_for_outline": false,
+    "ready_for_drafting": false,
+    "pack_version": 2
+  }
+}

@@ -1,0 +1,150 @@
+{
+  "description": "High-priority open questions block drafting — starting pack has all required fields confirmed across all sections (outline + drafting ready). Payload adds two high-priority unresolved questions. Result: ready_for_outline stays true, ready_for_drafting drops to false.",
+  "starting_pack": {
+    "version": 5,
+    "last_modified": "2026-03-06T12:00:00.000Z",
+    "changelog": [],
+    "project_core": {
+      "genre_primary": { "value": "dark fantasy", "status": "confirmed" },
+      "premise":       { "value": "A disgraced knight escorts a girl tied to a dead god across a fractured kingdom.", "status": "confirmed" },
+      "hook":          { "value": "Why is a broken man the only one standing between a dead god and the living world?", "status": "confirmed" },
+      "title":         { "value": null, "status": "unresolved" },
+      "format":        { "value": null, "status": "unresolved" },
+      "subgenre":      { "value": null, "status": "unresolved" },
+      "audience":      { "value": null, "status": "unresolved" },
+      "market_position": { "value": null, "status": "unresolved" }
+    },
+    "world_foundation": {
+      "setting_type":       { "value": "secondary world, pre-industrial", "status": "confirmed" },
+      "major_world_rules":  { "value": ["The old gods are dead but their power lingers in bloodlines", "The church controls access to god-touched individuals"], "status": "confirmed" },
+      "time_period":        { "value": null, "status": "unresolved" },
+      "primary_location":   { "value": null, "status": "unresolved" },
+      "power_structures":   { "value": [], "status": "unresolved" },
+      "magic_or_power_system": { "value": null, "status": "unresolved" },
+      "cultures":           { "value": [], "status": "unresolved" },
+      "world_conflicts":    { "value": [], "status": "unresolved" },
+      "secrets":            { "value": [], "status": "unresolved" }
+    },
+    "story_engine": {
+      "central_conflict": { "value": "A disgraced knight must deliver a girl to safety before a cult can use her to resurrect a dead god.", "status": "confirmed" },
+      "story_question":   { "value": "Can a broken man protect someone he doesn't believe deserves saving?", "status": "confirmed" },
+      "stakes":           { "value": "If the cult succeeds, a dead god returns through the girl and the world changes irrevocably.", "status": "confirmed" },
+      "themes":           { "value": [], "status": "unresolved" },
+      "hooks":            { "value": [], "status": "unresolved" },
+      "pressure_points":  { "value": [], "status": "unresolved" },
+      "reader_experience": { "value": null, "status": "unresolved" }
+    },
+    "character_system": {
+      "protagonist": {
+        "name":          { "value": "Aldric", "status": "confirmed" },
+        "role_summary":  { "value": null, "status": "unresolved" },
+        "external_want": { "value": "Complete the escort and collect payment.", "status": "confirmed" },
+        "internal_need": { "value": "Find a reason to keep living.", "status": "confirmed" },
+        "wound":         { "value": "Caused the death of his entire company through a moment of cowardice.", "status": "confirmed" },
+        "flaw":          { "value": null, "status": "unresolved" },
+        "arc_direction": { "value": null, "status": "unresolved" },
+        "voice_notes":   { "value": null, "status": "unresolved" }
+      },
+      "antagonist_or_opposing_force": {
+        "name":                        { "value": null, "status": "unresolved" },
+        "nature":                      { "value": "Religious cult seeking to resurrect their dead god.", "status": "confirmed" },
+        "role_summary":                { "value": "The cult pursues the girl across the kingdom, using violence and infiltration.", "status": "confirmed" },
+        "motivation":                  { "value": null, "status": "unresolved" },
+        "relationship_to_protagonist": { "value": null, "status": "unresolved" }
+      },
+      "supporting_cast": [],
+      "relationship_map": { "value": [], "status": "unresolved" },
+      "factions":         { "value": [], "status": "unresolved" }
+    },
+    "plot_frame": {
+      "beginning_state":   { "value": "Aldric is hired drunk in a border-town tavern, taking the job because he has nothing else.", "status": "confirmed" },
+      "inciting_incident": { "value": "The girl's previous escort is assassinated on the road.", "status": "confirmed" },
+      "first_turn":        { "value": "Aldric discovers the cult's true nature and realizes he cannot abandon the job without condemning the girl.", "status": "confirmed" },
+      "midpoint":          { "value": null, "status": "unresolved" },
+      "darkest_moment":    { "value": null, "status": "unresolved" },
+      "climax":            { "value": "Aldric confronts the cult leader in the girl's destination city.", "status": "confirmed" },
+      "resolution_shape":  { "value": null, "status": "unresolved" },
+      "major_reveals":     { "value": [], "status": "unresolved" },
+      "set_pieces":        { "value": [], "status": "unresolved" }
+    },
+    "ending_design": {
+      "ending_summary":          { "value": "Aldric stops the ritual but cannot save himself.", "status": "confirmed" },
+      "final_image":             { "value": null, "status": "unresolved" },
+      "protagonist_final_state": { "value": null, "status": "unresolved" },
+      "relationship_end_states": { "value": [], "status": "unresolved" },
+      "world_state_after":       { "value": null, "status": "unresolved" },
+      "required_payoffs":        { "value": ["Aldric's cowardice must be faced directly", "The girl's agency in her own fate must be honored"], "status": "confirmed" },
+      "emotional_ending_feel":   { "value": "bittersweet", "status": "confirmed" }
+    },
+    "author_preferences": {
+      "pov_preference":        { "value": "third limited", "status": "confirmed" },
+      "prose_register":        { "value": "spare and direct", "status": "confirmed" },
+      "chapter_length_target": { "value": null, "status": "unresolved" },
+      "tense_preference":      { "value": null, "status": "unresolved" },
+      "explicit_inspirations": { "value": [], "status": "unresolved" },
+      "must_include":          { "value": [], "status": "unresolved" },
+      "must_avoid":            { "value": ["chosen-one prophecy framing"], "status": "confirmed" },
+      "content_limits":        { "value": null, "status": "unresolved" },
+      "trope_targets":         { "value": [], "status": "unresolved" },
+      "trope_avoids":          { "value": [], "status": "unresolved" },
+      "favorite_elements":     { "value": [], "status": "unresolved" },
+      "non_negotiables":       { "value": [], "status": "unresolved" },
+      "style_preferences":     { "value": [], "status": "unresolved" },
+      "constraints":           { "value": [], "status": "unresolved" }
+    },
+    "open_questions": [],
+    "completeness_status": {
+      "project_core":       "sufficient",
+      "world_foundation":   "sufficient",
+      "story_engine":       "sufficient",
+      "character_system":   "sufficient",
+      "plot_frame":         "sufficient",
+      "ending_design":      "sufficient",
+      "author_preferences": "sufficient",
+      "overall":            "sufficient",
+      "ready_for_outline":  true,
+      "ready_for_drafting": true,
+      "blocking_issues": []
+    }
+  },
+  "payload": {
+    "round_info": {
+      "round_label": "Pass 6 - Gap analysis",
+      "source_type": "chat",
+      "handoff_date": "2026-03-07"
+    },
+    "summary": "Author identified two critical unresolved areas they want to think more on before drafting.",
+    "updates": [],
+    "open_questions": [
+      {
+        "question": "Does Aldric survive the ending, or does he die stopping the ritual?",
+        "section": "ending_design",
+        "priority": "high",
+        "reason": "Protagonist survival vs death changes the emotional weight and required payoffs significantly."
+      },
+      {
+        "question": "What is the girl's actual agency in the final confrontation — does she choose her fate?",
+        "section": "character_system",
+        "priority": "high",
+        "reason": "Required payoff mentions the girl's agency — this must be explicitly resolved before drafting."
+      }
+    ],
+    "contradictions": [],
+    "author_notes": [],
+    "completeness_hints": {
+      "ready_for_outline": true,
+      "priority_gaps": [
+        "Protagonist fate in ending unresolved",
+        "Girl's agency in climax unresolved"
+      ]
+    }
+  },
+  "expected": {
+    "updates_applied": 0,
+    "contradictions_logged": 0,
+    "new_open_questions": 2,
+    "ready_for_outline": true,
+    "ready_for_drafting": false,
+    "pack_version": 6
+  }
+}

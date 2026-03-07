@@ -418,7 +418,8 @@ const REQUIRED_FIELDS_MAP = {
   ],
   author_preferences: [
     ["author_preferences", "pov_preference"],
-    ["author_preferences", "prose_register"]
+    ["author_preferences", "prose_register"],
+    ["author_preferences", "must_avoid"]
   ]
 };
 

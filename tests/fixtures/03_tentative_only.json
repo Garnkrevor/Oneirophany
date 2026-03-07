@@ -1,0 +1,57 @@
+{
+  "description": "Tentative-only round — all updates have tentative status. Fields should be written (blank -> tentative is allowed) but none count toward completeness, so all sections stay not_started and readiness flags remain false.",
+  "starting_pack": null,
+  "payload": {
+    "round_info": {
+      "round_label": "Pass 1 - Tentative brainstorm",
+      "source_type": "notes",
+      "handoff_date": "2026-03-07"
+    },
+    "summary": "Author brainstormed loosely. Nothing confirmed — all ideas tentative. Nothing should count toward completeness.",
+    "updates": [
+      {
+        "section": "project_core",
+        "field": "genre_primary",
+        "value": "dark fantasy",
+        "status": "tentative",
+        "source_quote": "Maybe dark fantasy, I'm not sure.",
+        "notes": "Hedged strongly."
+      },
+      {
+        "section": "project_core",
+        "field": "premise",
+        "value": "Something about a knight, possibly.",
+        "status": "tentative",
+        "source_quote": "I think it might be about a knight?",
+        "notes": "Very vague."
+      },
+      {
+        "section": "project_core",
+        "field": "hook",
+        "value": "I don't know yet, something compelling.",
+        "status": "tentative",
+        "source_quote": "The hook will come to me.",
+        "notes": ""
+      }
+    ],
+    "open_questions": [],
+    "contradictions": [],
+    "author_notes": [],
+    "completeness_hints": {
+      "ready_for_outline": false,
+      "priority_gaps": [
+        "Nothing confirmed yet",
+        "Premise needs development",
+        "Genre needs confirmation"
+      ]
+    }
+  },
+  "expected": {
+    "updates_applied": 3,
+    "contradictions_logged": 0,
+    "new_open_questions": 0,
+    "ready_for_outline": false,
+    "ready_for_drafting": false,
+    "pack_version": 2
+  }
+}

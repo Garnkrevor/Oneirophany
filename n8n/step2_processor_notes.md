@@ -239,12 +239,12 @@ try {
 }
 
 // Basic structural validation
-if (!payload.patches || !Array.isArray(payload.patches)) {
+if (!payload.updates || !Array.isArray(payload.updates)) {
   return [{
     json: {
       parse_error: true,
       raw_response: raw,
-      error_message: "patches array missing from payload"
+      error_message: "updates array missing from payload"
     }
   }];
 }
