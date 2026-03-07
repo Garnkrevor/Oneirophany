@@ -1,0 +1,29 @@
+{
+  "proof_run": "02 — Error branch (forced parse failure)",
+  "description": "Simulates Node 7 (AI: Extract Payload) returning prose instead of valid JSON. Node 8 (Parse and Validate) detects the failure and routes to Error Handler via IF node.",
+  "simulates": "Nodes 8 (Parse and Validate) + 9 (IF: Parse Error) + 15 (Error Handler)",
+  "malformed_ai_response_excerpt": "Here is the foundation update payload for this round:\n\nI identified the following key story elements from the transcript:\n\n1. The protagonist is a knight who has been disgraced...\n2. The genre appears...",
+  "node_8_parse_and_validate_output": {
+    "parse_error": true,
+    "raw_response": "Here is the foundation update payload for this round:\n\nI identified the following key story elements from the transcript:\n\n1. The protagonist is a knight who has been disgraced...\n2. The genre appears to be dark fantasy...\n\nUnfortunately I could not format this as valid JSON due to the complexity.\n",
+    "error_message": "JSON parse failed: Unexpected token 'H', \"Here is th\"... is not valid JSON"
+  },
+  "node_9_if_result": {
+    "condition": "parse_error === true",
+    "evaluated_to": true,
+    "routes_to": "Error Handler (true branch)"
+  },
+  "node_15_error_handler_output": {
+    "halted": true,
+    "reason": "Parse or validation failure — master pack was NOT updated.",
+    "error_message": "JSON parse failed: Unexpected token 'H', \"Here is th\"... is not valid JSON",
+    "recovery": "Check error log in /data/errors and retry with corrected input."
+  },
+  "validation": {
+    "parse_error_detected": true,
+    "master_pack_not_written": true,
+    "error_message_present": true,
+    "halted_flag_set": true,
+    "all_pass": true
+  }
+}

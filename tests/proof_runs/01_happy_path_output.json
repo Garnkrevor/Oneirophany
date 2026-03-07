@@ -1,0 +1,120 @@
+{
+  "proof_run": "01 — Happy path (Pass 1)",
+  "fixture": "01_happy_path_pass1.json",
+  "description": "Pass 1 happy path — confirms core premise, genre, hook, reader experience, protagonist name and goal, plus two author notes. Starting from blank template.",
+  "simulates": "Nodes 6 (Prepare Merge Input) + 11 (Merge Patches) with fixture 01 payload on blank template",
+  "input_summary": {
+    "starting_pack_version": 1,
+    "payload_round_label": "Pass 1 - Concept and premise",
+    "updates_in_payload": 6,
+    "open_questions_in_payload": 3,
+    "author_notes_in_payload": 2
+  },
+  "merge_report": {
+    "version": 2,
+    "updates_applied": 8,
+    "updates_skipped": 0,
+    "locked_skips": [],
+    "contradictions_logged": 0,
+    "new_open_questions": 3,
+    "author_notes_applied": 2,
+    "ready_for_outline": false,
+    "ready_for_drafting": false,
+    "blocking_issues": [
+      "story_engine is not_started — required for outline",
+      "character_system is partial — required for outline",
+      "ending_design has no content — at least ending_summary required"
+    ],
+    "skipped": [],
+    "contradictions": []
+  },
+  "completeness_status": {
+    "project_core": "sufficient",
+    "world_foundation": "not_started",
+    "story_engine": "not_started",
+    "character_system": "partial",
+    "plot_frame": "not_started",
+    "ending_design": "not_started",
+    "author_preferences": "partial",
+    "overall": "partial",
+    "ready_for_outline": false,
+    "ready_for_drafting": false,
+    "blocking_issues": [
+      "story_engine is not_started — required for outline",
+      "character_system is partial — required for outline",
+      "ending_design has no content — at least ending_summary required"
+    ]
+  },
+  "pack_version_after": 2,
+  "changelog_entry": {
+    "version": 2,
+    "timestamp": "2026-03-07T19:51:44.214Z",
+    "round_label": "Pass 1 - Concept and premise",
+    "summary": "Strong premise. Genre and hook are clear. Protagonist name and external goal established. Ending still vague. Author has two hard avoids.",
+    "patches_applied": 8
+  },
+  "confirmed_fields_sample": {
+    "project_core.genre_primary": {
+      "value": "dark fantasy",
+      "status": "confirmed",
+      "source_quote": "It's definitely dark fantasy.",
+      "set_in_version": 2
+    },
+    "project_core.premise": {
+      "value": "A disgraced knight escorts a girl tied to a dead god across a fractured kingdom.",
+      "status": "confirmed",
+      "source_quote": "It's about a disgraced knight escorting a girl tied to a dead god.",
+      "set_in_version": 2
+    },
+    "project_core.hook": {
+      "value": "Why is a disgraced man the only one standing between a dead god and the living world?",
+      "status": "confirmed",
+      "source_quote": "The hook is why a disgraced man ends up being the one who has to do this.",
+      "set_in_version": 2
+    },
+    "character_system.protagonist.name": {
+      "value": "Aldric",
+      "status": "confirmed",
+      "source_quote": "His name is Aldric.",
+      "set_in_version": 2
+    }
+  },
+  "open_questions_added": [
+    {
+      "id": "oq_001",
+      "question": "What exactly caused Aldric's disgrace?",
+      "section": "character_system",
+      "priority": "high",
+      "reason": "Central to protagonist motivation and identity.",
+      "added_in_version": 2,
+      "resolved": false
+    },
+    {
+      "id": "oq_002",
+      "question": "Does the girl understand her connection to the dead god?",
+      "section": "character_system",
+      "priority": "high",
+      "reason": "Affects character dynamic and the mystery structure.",
+      "added_in_version": 2,
+      "resolved": false
+    },
+    {
+      "id": "oq_003",
+      "question": "How does the story end in broad terms?",
+      "section": "ending_design",
+      "priority": "high",
+      "reason": "Ending clarity is essential for outlining and drafting.",
+      "added_in_version": 2,
+      "resolved": false
+    }
+  ],
+  "validation": {
+    "pack_version_incremented": true,
+    "updates_applied_matches_expected": true,
+    "no_contradictions": true,
+    "open_questions_count": true,
+    "not_ready_for_outline": true,
+    "not_ready_for_drafting": true,
+    "all_pass": true
+  }
+}

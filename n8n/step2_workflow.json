@@ -1,0 +1,465 @@
+{
+  "name": "Oneirophany — Step 2 Foundation Processor",
+  "nodes": [
+    {
+      "id": "a6c98746-6416-460d-a789-e878bb06fd0d",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [
+        260,
+        380
+      ],
+      "parameters": {
+        "path": "foundation-processor",
+        "responseMode": "lastNode",
+        "responseData": "allEntries",
+        "httpMethod": "POST",
+        "options": {}
+      },
+      "webhookId": "5220e474-537f-41af-bafa-7678db633242"
+    },
+    {
+      "id": "50872a22-e1f4-4886-a2b4-b54b6ae613b9",
+      "name": "Validate Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        380
+      ],
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nconst body = data.body || data;\n\nconst raw_input = (body.raw_input || '').trim();\nconst round_label = (body.round_label || 'Unlabeled round').trim();\n\nconst VALID_TYPES = ['chat_transcript', 'voice_transcript', 'freeform_notes', 'answer_block'];\nconst input_type = VALID_TYPES.includes(body.input_type) ? body.input_type : 'freeform_notes';\n\nif (!raw_input) {\n  throw new Error('Validation failed: raw_input is empty or missing.');\n}\n\nreturn [{ json: { raw_input, round_label, input_type } }];"
+      }
+    },
+    {
+      "id": "f97bf5c8-18e7-4559-af80-b7f869caafb6",
+      "name": "Load Current Pack",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        700,
+        380
+      ],
+      "parameters": {
+        "jsCode": "const prev = $('Validate Input').first().json;\n\nconst packPath = process.env.ONEIROPHANY_PACK_PATH || '/data/story_foundation_pack.json';\nconst templatePath = process.env.ONEIROPHANY_TEMPLATE_PATH || '/data/story_foundation_pack.template.json';\n\nlet current_pack;\ntry {\n  const fsLib = require('fs');\n  if (fsLib.existsSync(packPath)) {\n    current_pack = JSON.parse(fsLib.readFileSync(packPath, 'utf-8'));\n  } else if (fsLib.existsSync(templatePath)) {\n    current_pack = JSON.parse(fsLib.readFileSync(templatePath, 'utf-8'));\n  } else {\n    throw new Error(\n      'Neither pack nor template found. ' +\n      'Set ONEIROPHANY_PACK_PATH and ONEIROPHANY_TEMPLATE_PATH environment variables.'\n    );\n  }\n} catch (err) {\n  throw new Error('Load Current Pack failed: ' + err.message);\n}\n\nreturn [{\n  json: {\n    raw_input: prev.raw_input,\n    round_label: prev.round_label,\n    input_type: prev.input_type,\n    current_pack\n  }\n}];"
+      }
+    },
+    {
+      "id": "3a13562e-eee2-4961-bc34-378ad033610c",
+      "name": "Build Normalize Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        920,
+        380
+      ],
+      "parameters": {
+        "jsCode": "const prev = $('Load Current Pack').first().json;\n\nconst systemPrompt = [\n  'You are a text normalizer for a story development system.',\n  '',\n  'Your job is to clean the raw input below so it is easier for an extraction model to process.',\n  '',\n  'Rules:',\n  '- Keep all story content. Do not remove or summarize story ideas.',\n  '- Remove meta-conversation (greetings, technical discussions, tangents, filler like \"let me rephrase that\").',\n  '- Remove filler words and repeated phrases from voice transcripts.',\n  '- For chat transcripts with speaker labels: keep only the author statements. Remove assistant or interviewer messages.',\n  '- Preserve the author own language as much as possible. Do not paraphrase story content.',\n  '- Output clean prose or a clean list of statements. Not a summary.',\n  '- If the input is already clean, return it as-is.'\n].join('\\n');\n\nconst userContent = [\n  'Input type: ' + prev.input_type,\n  '',\n  'Raw input:',\n  '---',\n  prev.raw_input,\n  '---',\n  '',\n  'Normalized output:'\n].join('\\n');\n\nreturn [{\n  json: {\n    request_body: {\n      model: 'claude-sonnet-4-6',\n      max_tokens: 4096,\n      system: systemPrompt,\n      messages: [{ role: 'user', content: userContent }]\n    },\n    round_label: prev.round_label,\n    input_type: prev.input_type,\n    current_pack: prev.current_pack\n  }\n}];"
+      }
+    },
+    {
+      "id": "e6eb0cd7-6e39-4c4f-9cb7-c53d7f98e923",
+      "name": "AI: Normalize Text",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1140,
+        380
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.ANTHROPIC_API_KEY }}"
+            },
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify($input.first().json.request_body) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "d19c27cf-47ea-46b3-816a-ccb986805e0a",
+      "name": "Build Extract Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1360,
+        380
+      ],
+      "parameters": {
+        "jsCode": "const normResponse = $('AI: Normalize Text').first().json;\nconst normalized_text = normResponse.content && normResponse.content[0]\n  ? normResponse.content[0].text\n  : String(normResponse);\n\nconst packData = $('Load Current Pack').first().json;\nconst round_label = packData.round_label;\nconst current_pack = packData.current_pack;\nconst handoff_date = new Date().toISOString().slice(0, 10);\n\nconst fieldReference = [\n  'project_core: title, format, genre_primary, subgenre, premise, hook, audience, market_position',\n  'world_foundation: setting_type, time_period, primary_location, major_world_rules, power_structures, magic_or_power_system, cultures, world_conflicts, secrets',\n  'story_engine: central_conflict, story_question, stakes, themes, hooks, pressure_points, reader_experience',\n  'character_system: protagonist_name, protagonist_role_summary, protagonist_external_goal, protagonist_internal_need, protagonist_wound, protagonist_flaw, protagonist_arc_direction, protagonist_voice_notes, antagonist_name, antagonist_nature, antagonist_role_summary, antagonist_motivation, antagonist_relationship_to_protagonist, relationship_map, factions',\n  'plot_frame: beginning_state, inciting_incident, first_turn, midpoint, darkest_moment, climax, resolution_shape, major_reveals, set_pieces',\n  'ending_design: ending_summary, final_image, protagonist_final_state, relationship_end_states, world_state_after, required_payoffs, emotional_ending_feel',\n  'author_preferences: pov_preference, prose_register, chapter_length_target, tense_preference, explicit_inspirations, must_include, must_avoid, content_limits, trope_targets, trope_avoids, favorite_elements, non_negotiables, style_preferences, constraints'\n].join('\\n');\n\nconst systemPrompt = [\n  'You are a structured data extractor for a story development system.',\n  '',\n  'Your job is to read the author statements from this round and extract updates to the story_foundation_pack as a foundation_update_payload.',\n  '',\n  'Critical rules:',\n  '- Only extract information the author actually stated. Do not invent, infer, or embellish.',\n  '- Do not infer themes, symbolism, or meaning unless the author explicitly stated them.',\n  '- confirmed: stated clearly and directly.',\n  '- tentative: stated with hedging language (maybe, possibly, I think, not sure).',\n  '- superseded: author explicitly revised a prior statement. Include the replacement value.',\n  '- Do not include update records for fields where nothing new was said this round.',\n  '- Contradictions: if new input conflicts with an existing confirmed field, log it in contradictions. Do not auto-resolve. Do not overwrite the confirmed field.',\n  '- Author preferences and constraints go in author_notes, not in updates.',\n  '',\n  'Field reference by section:',\n  fieldReference,\n  '',\n  'Return a foundation_update_payload JSON object with these top-level keys:',\n  '  round_info: { round_label, source_type, handoff_date }',\n  '  summary: string',\n  '  updates: [{ section, field, value, status, source_quote, notes }]',\n  '  open_questions: [{ question, section, priority, reason }]',\n  '  contradictions: [{ section, field, earlier_value, new_value, description, needs_author_resolution }]',\n  '  author_notes: [{ type, value, status }]',\n  '  completeness_hints: { ready_for_outline, priority_gaps }',\n  '',\n  'Return only valid JSON. No explanation text outside the JSON object.'\n].join('\\n');\n\nconst userContent = [\n  'Round label: ' + round_label,\n  'Handoff date: ' + handoff_date,\n  '',\n  'Current story_foundation_pack:',\n  '---',\n  JSON.stringify(current_pack, null, 2),\n  '---',\n  '',\n  'Normalized round input:',\n  '---',\n  normalized_text,\n  '---'\n].join('\\n');\n\nreturn [{\n  json: {\n    request_body: {\n      model: 'claude-sonnet-4-6',\n      max_tokens: 8192,\n      system: systemPrompt,\n      messages: [{ role: 'user', content: userContent }]\n    },\n    normalized_text,\n    round_label,\n    current_pack\n  }\n}];"
+      }
+    },
+    {
+      "id": "1b0642ed-fb47-41dc-a43a-60e7db2de948",
+      "name": "AI: Extract Payload",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1580,
+        380
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.ANTHROPIC_API_KEY }}"
+            },
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify($input.first().json.request_body) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "11570b33-0573-4c21-8e14-eeff24ed5fa3",
+      "name": "Parse and Validate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1800,
+        380
+      ],
+      "parameters": {
+        "jsCode": "const response = $input.first().json;\nconst rawText = response.content && response.content[0]\n  ? response.content[0].text\n  : String(response);\n\n// Strip markdown code fences if the model wrapped the JSON\nconst cleaned = rawText.replace(/^```json\\s*/i, '').replace(/\\s*```$/i, '').trim();\n\nlet payload;\ntry {\n  payload = JSON.parse(cleaned);\n} catch (e) {\n  return [{\n    json: {\n      parse_error: true,\n      raw_response: rawText,\n      error_message: 'JSON parse failed: ' + e.message\n    }\n  }];\n}\n\n// Structural validation\nif (!payload.updates || !Array.isArray(payload.updates)) {\n  return [{\n    json: {\n      parse_error: true,\n      raw_response: rawText,\n      error_message: 'updates array missing from payload'\n    }\n  }];\n}\n\nif (!payload.round_info || typeof payload.round_info !== 'object') {\n  return [{\n    json: {\n      parse_error: true,\n      raw_response: rawText,\n      error_message: 'round_info object missing from payload'\n    }\n  }];\n}\n\nconst VALID_STATUSES = new Set(['confirmed', 'tentative', 'superseded']);\nfor (let i = 0; i < payload.updates.length; i++) {\n  const u = payload.updates[i];\n  if (!u.section || !u.field) {\n    return [{\n      json: {\n        parse_error: true,\n        raw_response: rawText,\n        error_message: 'updates[' + i + '] missing section or field'\n      }\n    }];\n  }\n  if (!VALID_STATUSES.has(u.status)) {\n    return [{\n      json: {\n        parse_error: true,\n        raw_response: rawText,\n        error_message: 'updates[' + i + '] has invalid status: ' + u.status\n      }\n    }];\n  }\n}\n\n// Fill optional arrays with defaults\nif (!Array.isArray(payload.open_questions)) payload.open_questions = [];\nif (!Array.isArray(payload.contradictions)) payload.contradictions = [];\nif (!Array.isArray(payload.author_notes)) payload.author_notes = [];\nif (!payload.completeness_hints) {\n  payload.completeness_hints = { ready_for_outline: false, priority_gaps: [] };\n}\n\nreturn [{ json: { parse_error: false, payload } }];"
+      }
+    },
+    {
+      "id": "dd15ecce-4b87-47a6-afa6-53952830e4da",
+      "name": "IF: Parse Error",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2020,
+        380
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "e98b97ed-aa6e-4ac3-99d5-25a91f33ff1a",
+              "leftValue": "={{ $json.parse_error }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "3f2198bf-af2f-47b1-90a5-c2bfa9b923ad",
+      "name": "Prepare Merge Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2240,
+        240
+      ],
+      "parameters": {
+        "jsCode": "const validated = $('Parse and Validate').first().json;\nconst packData   = $('Load Current Pack').first().json;\nreturn [{ json: { payload: validated.payload, current_pack: packData.current_pack } }];"
+      }
+    },
+    {
+      "id": "b57aa230-b728-4f91-bc6b-ccd874172b66",
+      "name": "Merge Patches",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2460,
+        240
+      ],
+      "parameters": {
+        "jsCode": "/**\n * Step 2 — Merge Code Node\n *\n * Applies a foundation_update_payload to the current story_foundation_pack.\n * This node governs canon. The model only extracts — this node decides what sticks.\n *\n * Inputs (from previous node):\n *   $input.first().json = { payload, current_pack }\n *\n *   payload:      foundation_update_payload object (parsed, validated)\n *   current_pack: story_foundation_pack object (loaded from JSON master)\n *\n * Output:\n *   {\n *     updated_pack:     story_foundation_pack,\n *     merge_report:     summary of what happened,\n *     round_summary:    from payload\n *   }\n */\n\nconst input = $input.first().json;\nconst payload = input.payload;\nconst pack = JSON.parse(JSON.stringify(input.current_pack)); // deep clone — never mutate the original\nconst now = new Date().toISOString();\n\n// ─── Pack normalizer ──────────────────────────────────────────────────────────\n//\n// Ensures the pack has the expected top-level shape before anything touches it.\n// Prevents path resolution failures when working with a partially initialized pack.\n\nfunction ensureObject(obj, key) {\n  if (!obj[key] || typeof obj[key] !== \"object\" || Array.isArray(obj[key])) {\n    obj[key] = {};\n  }\n}\n\nensureObject(pack, \"project_core\");\nensureObject(pack, \"world_foundation\");\nensureObject(pack, \"story_engine\");\nensureObject(pack, \"character_system\");\nensureObject(pack, \"plot_frame\");\nensureObject(pack, \"ending_design\");\nensureObject(pack, \"author_preferences\");\nensureObject(pack, \"completeness_status\");\nensureObject(pack.character_system, \"protagonist\");\nensureObject(pack.character_system, \"antagonist_or_opposing_force\");\n\nif (!Array.isArray(pack.open_questions)) pack.open_questions = [];\nif (!Array.isArray(pack.changelog)) pack.changelog = [];\n\n// ─── Field mapping ────────────────────────────────────────────────────────────\n//\n// Translates section.field keys from the payload to nested paths in the pack.\n\nconst FIELD_MAP = {\n  // project_core\n  \"project_core.title\":           [\"project_core\", \"title\"],\n  \"project_core.format\":          [\"project_core\", \"format\"],\n  \"project_core.genre_primary\":   [\"project_core\", \"genre_primary\"],\n  \"project_core.subgenre\":        [\"project_core\", \"subgenre\"],\n  \"project_core.premise\":         [\"project_core\", \"premise\"],\n  \"project_core.hook\":            [\"project_core\", \"hook\"],\n  \"project_core.audience\":        [\"project_core\", \"audience\"],\n  \"project_core.market_position\": [\"project_core\", \"market_position\"],\n\n  // world_foundation\n  \"world_foundation.setting_type\":           [\"world_foundation\", \"setting_type\"],\n  \"world_foundation.time_period\":            [\"world_foundation\", \"time_period\"],\n  \"world_foundation.primary_location\":       [\"world_foundation\", \"primary_location\"],\n  \"world_foundation.major_world_rules\":      [\"world_foundation\", \"major_world_rules\"],\n  \"world_foundation.power_structures\":       [\"world_foundation\", \"power_structures\"],\n  \"world_foundation.magic_or_power_system\":  [\"world_foundation\", \"magic_or_power_system\"],\n  \"world_foundation.cultures\":               [\"world_foundation\", \"cultures\"],\n  \"world_foundation.world_conflicts\":        [\"world_foundation\", \"world_conflicts\"],\n  \"world_foundation.secrets\":                [\"world_foundation\", \"secrets\"],\n\n  // story_engine\n  \"story_engine.central_conflict\":  [\"story_engine\", \"central_conflict\"],\n  \"story_engine.story_question\":    [\"story_engine\", \"story_question\"],\n  \"story_engine.stakes\":            [\"story_engine\", \"stakes\"],\n  \"story_engine.themes\":            [\"story_engine\", \"themes\"],\n  \"story_engine.hooks\":             [\"story_engine\", \"hooks\"],\n  \"story_engine.pressure_points\":   [\"story_engine\", \"pressure_points\"],\n  \"story_engine.reader_experience\": [\"story_engine\", \"reader_experience\"],\n\n  // character_system — protagonist\n  \"character_system.protagonist_name\":          [\"character_system\", \"protagonist\", \"name\"],\n  \"character_system.protagonist_role_summary\":  [\"character_system\", \"protagonist\", \"role_summary\"],\n  \"character_system.protagonist_external_goal\": [\"character_system\", \"protagonist\", \"external_want\"],\n  \"character_system.protagonist_internal_need\": [\"character_system\", \"protagonist\", \"internal_need\"],\n  \"character_system.protagonist_wound\":         [\"character_system\", \"protagonist\", \"wound\"],\n  \"character_system.protagonist_flaw\":          [\"character_system\", \"protagonist\", \"flaw\"],\n  \"character_system.protagonist_arc_direction\": [\"character_system\", \"protagonist\", \"arc_direction\"],\n  \"character_system.protagonist_voice_notes\":   [\"character_system\", \"protagonist\", \"voice_notes\"],\n\n  // character_system — antagonist\n  \"character_system.antagonist_name\":                        [\"character_system\", \"antagonist_or_opposing_force\", \"name\"],\n  \"character_system.antagonist_nature\":                      [\"character_system\", \"antagonist_or_opposing_force\", \"nature\"],\n  \"character_system.antagonist_role_summary\":                [\"character_system\", \"antagonist_or_opposing_force\", \"role_summary\"],\n  \"character_system.antagonist_motivation\":                  [\"character_system\", \"antagonist_or_opposing_force\", \"motivation\"],\n  \"character_system.antagonist_relationship_to_protagonist\": [\"character_system\", \"antagonist_or_opposing_force\", \"relationship_to_protagonist\"],\n\n  // character_system — other\n  \"character_system.relationship_map\": [\"character_system\", \"relationship_map\"],\n  \"character_system.factions\":         [\"character_system\", \"factions\"],\n\n  // plot_frame\n  \"plot_frame.beginning_state\":   [\"plot_frame\", \"beginning_state\"],\n  \"plot_frame.inciting_incident\": [\"plot_frame\", \"inciting_incident\"],\n  \"plot_frame.first_turn\":        [\"plot_frame\", \"first_turn\"],\n  \"plot_frame.midpoint\":          [\"plot_frame\", \"midpoint\"],\n  \"plot_frame.darkest_moment\":    [\"plot_frame\", \"darkest_moment\"],\n  \"plot_frame.climax\":            [\"plot_frame\", \"climax\"],\n  \"plot_frame.resolution_shape\":  [\"plot_frame\", \"resolution_shape\"],\n  \"plot_frame.major_reveals\":     [\"plot_frame\", \"major_reveals\"],\n  \"plot_frame.set_pieces\":        [\"plot_frame\", \"set_pieces\"],\n\n  // ending_design\n  \"ending_design.ending_summary\":          [\"ending_design\", \"ending_summary\"],\n  \"ending_design.final_image\":             [\"ending_design\", \"final_image\"],\n  \"ending_design.protagonist_final_state\": [\"ending_design\", \"protagonist_final_state\"],\n  \"ending_design.relationship_end_states\": [\"ending_design\", \"relationship_end_states\"],\n  \"ending_design.world_state_after\":       [\"ending_design\", \"world_state_after\"],\n  \"ending_design.required_payoffs\":        [\"ending_design\", \"required_payoffs\"],\n  \"ending_design.emotional_ending_feel\":   [\"ending_design\", \"emotional_ending_feel\"],\n\n  // author_preferences\n  \"author_preferences.pov_preference\":        [\"author_preferences\", \"pov_preference\"],\n  \"author_preferences.prose_register\":        [\"author_preferences\", \"prose_register\"],\n  \"author_preferences.chapter_length_target\": [\"author_preferences\", \"chapter_length_target\"],\n  \"author_preferences.tense_preference\":      [\"author_preferences\", \"tense_preference\"],\n  \"author_preferences.explicit_inspirations\": [\"author_preferences\", \"explicit_inspirations\"],\n  \"author_preferences.must_include\":          [\"author_preferences\", \"must_include\"],\n  \"author_preferences.must_avoid\":            [\"author_preferences\", \"must_avoid\"],\n  \"author_preferences.content_limits\":        [\"author_preferences\", \"content_limits\"],\n  \"author_preferences.trope_targets\":         [\"author_preferences\", \"trope_targets\"],\n  \"author_preferences.trope_avoids\":          [\"author_preferences\", \"trope_avoids\"],\n  \"author_preferences.favorite_elements\":     [\"author_preferences\", \"favorite_elements\"],\n  \"author_preferences.non_negotiables\":       [\"author_preferences\", \"non_negotiables\"],\n  \"author_preferences.style_preferences\":     [\"author_preferences\", \"style_preferences\"],\n  \"author_preferences.constraints\":           [\"author_preferences\", \"constraints\"]\n};\n\n// ─── Array field registry ─────────────────────────────────────────────────────\n//\n// Canonical set of fields that hold arrays of strings.\n// Used instead of inspecting the existing field shape, which is unreliable\n// when a field has never been written yet.\n\nconst ARRAY_FIELDS = new Set([\n  \"world_foundation.major_world_rules\",\n  \"world_foundation.power_structures\",\n  \"world_foundation.cultures\",\n  \"world_foundation.world_conflicts\",\n  \"world_foundation.secrets\",\n  \"story_engine.themes\",\n  \"story_engine.hooks\",\n  \"story_engine.pressure_points\",\n  \"character_system.protagonist_voice_notes\",\n  \"character_system.relationship_map\",\n  \"character_system.factions\",\n  \"plot_frame.major_reveals\",\n  \"plot_frame.set_pieces\",\n  \"ending_design.relationship_end_states\",\n  \"ending_design.required_payoffs\",\n  \"author_preferences.explicit_inspirations\",\n  \"author_preferences.must_include\",\n  \"author_preferences.must_avoid\",\n  \"author_preferences.trope_targets\",\n  \"author_preferences.trope_avoids\",\n  \"author_preferences.favorite_elements\",\n  \"author_preferences.non_negotiables\",\n  \"author_preferences.style_preferences\",\n  \"author_preferences.constraints\"\n]);\n\n// ─── Author note type mapping ─────────────────────────────────────────────────\n\nconst AUTHOR_NOTE_TYPE_MAP = {\n  must_include:     \"must_include\",\n  must_avoid:       \"must_avoid\",\n  style_preference: \"style_preferences\",\n  constraint:       \"constraints\",\n  inspiration:      \"explicit_inspirations\",\n  nonnegotiable:    \"non_negotiables\"\n};\n\n// ─── Helpers ──────────────────────────────────────────────────────────────────\n\nfunction resolvePackPath(pathParts) {\n  let cursor = pack;\n  for (let i = 0; i < pathParts.length - 1; i++) {\n    if (cursor == null || typeof cursor !== \"object\") return null;\n    cursor = cursor[pathParts[i]];\n  }\n  if (cursor == null || typeof cursor !== \"object\") return null;\n  return { parent: cursor, key: pathParts[pathParts.length - 1] };\n}\n\nfunction getSectionStatus(sectionName) {\n  return pack.completeness_status && pack.completeness_status[sectionName];\n}\n\n// ─── Tracking ─────────────────────────────────────────────────────────────────\n\nlet updatesApplied = 0;\nconst skipped = [];\nconst lockedSkips = [];\nconst contradictionsLogged = [];    // all contradictions, tagged by source\nconst newOpenQuestions = [];\nconst authorNotesApplied = [];\n\n// ─── Apply updates ─────────────────────────────────────────────────────────────\n\nfor (const update of payload.updates || []) {\n  const { section, field, value, status, source_quote, notes } = update;\n  const mapKey = `${section}.${field}`;\n  const pathParts = FIELD_MAP[mapKey];\n\n  if (!pathParts) {\n    skipped.push({ section, field, reason: `No mapping found for \"${mapKey}\"` });\n    continue;\n  }\n\n  // Hard stop: never touch locked sections\n  if (getSectionStatus(section) === \"locked\") {\n    lockedSkips.push({ section, field, reason: `Section \"${section}\" is locked` });\n    continue;\n  }\n\n  const ref = resolvePackPath(pathParts);\n  if (!ref) {\n    skipped.push({ section, field, reason: `Path not found in pack: ${pathParts.join(\".\")}` });\n    continue;\n  }\n\n  const currentField = ref.parent[ref.key];\n  const currentStatus = currentField && currentField.status ? currentField.status : \"unresolved\";\n  const isArray = ARRAY_FIELDS.has(mapKey);\n\n  // Merge rules:\n  //   confirmed  → fill blank/tentative/unresolved/superseded; do NOT overwrite confirmed (log contradiction)\n  //   tentative  → fill blank/unresolved/tentative only; never overwrite confirmed\n  //   superseded → apply only if a prior value exists; guard against nonsense\n\n  if (status === \"confirmed\") {\n    if (currentStatus === \"confirmed\") {\n      if (JSON.stringify(currentField.value) !== JSON.stringify(value)) {\n        contradictionsLogged.push({\n          source: \"merge_guard\",\n          section, field,\n          earlier_value: currentField.value,\n          new_value: value,\n          description: \"New confirmed value differs from existing confirmed value. Author review required.\",\n          needs_author_resolution: true\n        });\n        skipped.push({ section, field, reason: \"Confirmed field conflict — logged as contradiction, not overwritten\" });\n      } else {\n        skipped.push({ section, field, reason: \"Value unchanged — skipped\" });\n      }\n      continue;\n    }\n\n  } else if (status === \"tentative\") {\n    if (currentStatus === \"confirmed\") {\n      skipped.push({ section, field, reason: \"Cannot overwrite confirmed field with tentative value\" });\n      continue;\n    }\n\n  } else if (status === \"superseded\") {\n    // Guard: don't apply superseded if there is no existing value to supersede\n    if (!currentField || currentStatus === \"unresolved\") {\n      skipped.push({ section, field, reason: \"Superseded status requires an existing value — none found, skipped\" });\n      continue;\n    }\n  }\n\n  if (isArray) {\n    // Array merge: combine existing items with incoming items, dedupe\n    const existing = currentField && Array.isArray(currentField.value) ? currentField.value : [];\n    const incoming = Array.isArray(value) ? value : (value ? [value] : []);\n    const merged = Array.from(new Set([...existing, ...incoming]));\n\n    // Array status: use \"max confidence\" — do not downgrade a confirmed array to tentative\n    const finalStatus =\n      currentStatus === \"confirmed\" || status === \"confirmed\" ? \"confirmed\" : status;\n\n    ref.parent[ref.key] = {\n      value: merged,\n      status: finalStatus,\n      ...(source_quote ? { source_quote } : {}),\n      ...(notes ? { notes } : {}),\n      set_in_version: (pack.version || 0) + 1\n    };\n  } else {\n    ref.parent[ref.key] = {\n      value,\n      status,\n      ...(source_quote ? { source_quote } : {}),\n      ...(notes ? { notes } : {}),\n      set_in_version: (pack.version || 0) + 1\n    };\n  }\n\n  updatesApplied++;\n}\n\n// ─── Merge author_notes into author_preferences ───────────────────────────────\n\nfor (const note of payload.author_notes || []) {\n  const packField = AUTHOR_NOTE_TYPE_MAP[note.type];\n  if (!packField) continue;\n\n  const ref = resolvePackPath([\"author_preferences\", packField]);\n  if (!ref) continue;\n\n  const currentField = ref.parent[ref.key];\n  const currentStatus = currentField && currentField.status ? currentField.status : \"unresolved\";\n\n  if (currentStatus === \"confirmed\" && note.status === \"tentative\") {\n    skipped.push({ section: \"author_preferences\", field: packField, reason: \"Cannot overwrite confirmed with tentative author note\" });\n    continue;\n  }\n\n  const existing = currentField && Array.isArray(currentField.value) ? currentField.value : [];\n  if (!existing.includes(note.value)) {\n    const finalStatus =\n      currentStatus === \"confirmed\" || note.status === \"confirmed\" ? \"confirmed\" : note.status;\n    ref.parent[ref.key] = {\n      value: [...existing, note.value],\n      status: finalStatus,\n      set_in_version: (pack.version || 0) + 1\n    };\n    authorNotesApplied.push(note);\n    updatesApplied++;\n  }\n}\n\n// ─── Log contradictions from payload ─────────────────────────────────────────\n//\n// Tag with source: \"payload\" to distinguish from contradictions caught by merge_guard above.\n// Dedupe against any merge_guard contradictions already logged for the same section.field.\n\nconst mergeGuardKeys = new Set(\n  contradictionsLogged.map(c => `${c.section}.${c.field}`)\n);\n\nfor (const c of payload.contradictions || []) {\n  const key = `${c.section}.${c.field}`;\n  if (mergeGuardKeys.has(key)) continue; // already caught by merge_guard, skip duplicate\n  contradictionsLogged.push({ source: \"payload\", ...c });\n}\n\n// ─── Add open questions (with dedupe) ────────────────────────────────────────\n\nlet nextOqId = pack.open_questions.length + 1;\n\nfor (const oq of payload.open_questions || []) {\n  // Dedupe: skip if an identical unresolved question already exists\n  const alreadyExists = pack.open_questions.some(\n    existing =>\n      existing.question.trim().toLowerCase() === oq.question.trim().toLowerCase() &&\n      existing.section === oq.section &&\n      !existing.resolved\n  );\n  if (alreadyExists) continue;\n\n  const id = `oq_${String(nextOqId).padStart(3, \"0\")}`;\n  newOpenQuestions.push({\n    id,\n    question: oq.question,\n    section: oq.section,\n    priority: oq.priority,\n    reason: oq.reason || \"\",\n    added_in_version: (pack.version || 0) + 1,\n    resolved: false\n  });\n  nextOqId++;\n}\n\npack.open_questions.push(...newOpenQuestions);\n\n// ─── Compute completeness ─────────────────────────────────────────────────────\n\nconst REQUIRED_FIELDS_MAP = {\n  project_core: [\n    [\"project_core\", \"premise\"],\n    [\"project_core\", \"genre_primary\"],\n    [\"project_core\", \"hook\"]\n  ],\n  world_foundation: [\n    [\"world_foundation\", \"setting_type\"],\n    [\"world_foundation\", \"major_world_rules\"]\n  ],\n  story_engine: [\n    [\"story_engine\", \"central_conflict\"],\n    [\"story_engine\", \"story_question\"],\n    [\"story_engine\", \"stakes\"]\n  ],\n  character_system: [\n    [\"character_system\", \"protagonist\", \"name\"],\n    [\"character_system\", \"protagonist\", \"external_want\"],\n    [\"character_system\", \"protagonist\", \"internal_need\"],\n    [\"character_system\", \"protagonist\", \"wound\"],\n    [\"character_system\", \"antagonist_or_opposing_force\", \"nature\"],\n    [\"character_system\", \"antagonist_or_opposing_force\", \"role_summary\"]\n  ],\n  plot_frame: [\n    [\"plot_frame\", \"beginning_state\"],\n    [\"plot_frame\", \"inciting_incident\"],\n    [\"plot_frame\", \"first_turn\"],\n    [\"plot_frame\", \"climax\"]\n  ],\n  ending_design: [\n    [\"ending_design\", \"ending_summary\"],\n    [\"ending_design\", \"emotional_ending_feel\"],\n    [\"ending_design\", \"required_payoffs\"]\n  ],\n  author_preferences: [\n    [\"author_preferences\", \"pov_preference\"],\n    [\"author_preferences\", \"prose_register\"],\n    [\"author_preferences\", \"must_avoid\"]\n  ]\n};\n\nfunction assessSection(sectionName) {\n  const current = pack.completeness_status[sectionName];\n  if (current === \"locked\") return \"locked\";\n\n  const required = REQUIRED_FIELDS_MAP[sectionName] || [];\n  let confirmedCount = 0;\n\n  for (const pathParts of required) {\n    const ref = resolvePackPath(pathParts);\n    if (!ref) continue;\n    const field = ref.parent[ref.key];\n    if (!field) continue;\n    if (Array.isArray(field.value)) {\n      if (field.status === \"confirmed\" && field.value.length > 0) confirmedCount++;\n    } else {\n      if (field.status === \"confirmed\" && field.value !== null) confirmedCount++;\n    }\n  }\n\n  if (confirmedCount === 0) return \"not_started\";\n  if (confirmedCount < required.length) return \"partial\";\n  return \"sufficient\";\n}\n\nfunction computeCompleteness() {\n  const sections = Object.keys(REQUIRED_FIELDS_MAP);\n  const newStatus = { ...pack.completeness_status };\n  const blockingIssues = [];\n\n  for (const section of sections) {\n    newStatus[section] = assessSection(section);\n  }\n\n  const levels = sections.map(s => newStatus[s]);\n  if (levels.every(l => l === \"not_started\")) {\n    newStatus.overall = \"not_started\";\n  } else if (levels.every(l => l === \"sufficient\" || l === \"locked\")) {\n    newStatus.overall = \"sufficient\";\n  } else {\n    newStatus.overall = \"partial\";\n  }\n\n  const outlineReady =\n    (newStatus.project_core === \"sufficient\" || newStatus.project_core === \"locked\") &&\n    (newStatus.story_engine === \"sufficient\" || newStatus.story_engine === \"locked\") &&\n    (newStatus.character_system === \"sufficient\" || newStatus.character_system === \"locked\") &&\n    [\"partial\", \"sufficient\", \"locked\"].includes(newStatus.plot_frame) &&\n    [\"partial\", \"sufficient\", \"locked\"].includes(newStatus.ending_design);\n\n  const unresolvedHighPriority = pack.open_questions.filter(\n    oq => oq.priority === \"high\" && !oq.resolved\n  ).length;\n\n  const draftingReady =\n    outlineReady &&\n    (newStatus.world_foundation === \"sufficient\" || newStatus.world_foundation === \"locked\") &&\n    (newStatus.plot_frame === \"sufficient\" || newStatus.plot_frame === \"locked\") &&\n    (newStatus.ending_design === \"sufficient\" || newStatus.ending_design === \"locked\") &&\n    (newStatus.author_preferences === \"sufficient\" || newStatus.author_preferences === \"locked\") &&\n    unresolvedHighPriority === 0;\n\n  newStatus.ready_for_outline = outlineReady;\n  newStatus.ready_for_drafting = draftingReady;\n\n  if (!outlineReady) {\n    for (const s of [\"project_core\", \"story_engine\", \"character_system\"]) {\n      if (newStatus[s] !== \"sufficient\" && newStatus[s] !== \"locked\") {\n        blockingIssues.push(`${s} is ${newStatus[s]} — required for outline`);\n      }\n    }\n    if (![\"partial\", \"sufficient\", \"locked\"].includes(newStatus.ending_design)) {\n      blockingIssues.push(\"ending_design has no content — at least ending_summary required\");\n    }\n  }\n\n  if (!draftingReady && outlineReady) {\n    for (const s of [\"world_foundation\", \"plot_frame\", \"ending_design\", \"author_preferences\"]) {\n      if (newStatus[s] !== \"sufficient\" && newStatus[s] !== \"locked\") {\n        blockingIssues.push(`${s} is ${newStatus[s]} — required for drafting`);\n      }\n    }\n    if (unresolvedHighPriority > 0) {\n      blockingIssues.push(`${unresolvedHighPriority} high-priority open question(s) unresolved`);\n    }\n  }\n\n  if (contradictionsLogged.length > 0) {\n    blockingIssues.push(\n      `${contradictionsLogged.length} unresolved contradiction(s) logged this round — human review required`\n    );\n  }\n\n  newStatus.blocking_issues = blockingIssues;\n  return newStatus;\n}\n\npack.completeness_status = computeCompleteness();\n\n// ─── Version and changelog ────────────────────────────────────────────────────\n\nconst previousVersion = pack.version || 0;\npack.version = previousVersion + 1;\npack.last_modified = now;\n\npack.changelog.push({\n  version: pack.version,\n  timestamp: now,\n  round_label: payload.round_info ? payload.round_info.round_label : \"Unknown round\",\n  summary: payload.summary || \"No summary provided.\",\n  patches_applied: updatesApplied\n});\n\n// ─── Output ───────────────────────────────────────────────────────────────────\n\nreturn [{\n  json: {\n    updated_pack: pack,\n    merge_report: {\n      version: pack.version,\n      updates_applied: updatesApplied,\n      updates_skipped: skipped.length,\n      locked_skips: lockedSkips.length,\n      contradictions_logged: contradictionsLogged.length,\n      new_open_questions: newOpenQuestions.length,\n      author_notes_applied: authorNotesApplied.length,\n      ready_for_outline: pack.completeness_status.ready_for_outline,\n      ready_for_drafting: pack.completeness_status.ready_for_drafting,\n      blocking_issues: pack.completeness_status.blocking_issues,\n      skipped,\n      locked_skips: lockedSkips,\n      contradictions: contradictionsLogged\n    },\n    completeness_hints: payload.completeness_hints || {},\n    round_summary: payload.summary || \"\"\n  }\n}];\n"
+      }
+    },
+    {
+      "id": "d3b9ca56-0ff4-45d2-b554-f4dbf8aa24b4",
+      "name": "Build Next Questions Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2680,
+        240
+      ],
+      "parameters": {
+        "jsCode": "const mergeResult = $('Merge Patches').first().json;\nconst pack = mergeResult.updated_pack;\nconst report = mergeResult.merge_report;\n\nconst unresolvedQuestions = (pack.open_questions || []).filter(q => !q.resolved);\n\nconst systemPrompt = [\n  'You are helping a story development system prepare for the next interview round.',\n  '',\n  'Based on the updated story foundation pack status and blocking issues below, generate the 5 to 10 most important questions to ask the author next.',\n  '',\n  'Prioritize:',\n  '1. Fields listed in blocking_issues',\n  '2. High-priority open questions that are still unresolved',\n  '3. Sections that are partial or not_started',\n  '',\n  'Rules:',\n  '- Ask open questions only. Do not suggest answers or embed ideas in the question.',\n  '- Do not repeat questions already in the open_questions list unless still unresolved and high priority.',\n  '- Each question should be specific enough to move the story forward.',\n  '',\n  'Return a JSON array of objects. Each object: { question: string, section: string, why: string }',\n  'Return only valid JSON. No explanation text outside the array.'\n].join('\\n');\n\nconst userContent = [\n  'Completeness status:',\n  JSON.stringify(pack.completeness_status, null, 2),\n  '',\n  'Blocking issues:',\n  (report.blocking_issues || []).join('\\n') || 'None',\n  '',\n  'Current unresolved open questions:',\n  JSON.stringify(unresolvedQuestions, null, 2)\n].join('\\n');\n\nreturn [{\n  json: {\n    request_body: {\n      model: 'claude-sonnet-4-6',\n      max_tokens: 2048,\n      system: systemPrompt,\n      messages: [{ role: 'user', content: userContent }]\n    },\n    updated_pack: pack,\n    merge_report: report,\n    round_summary: mergeResult.round_summary\n  }\n}];"
+      }
+    },
+    {
+      "id": "f8e1863b-17dd-44b4-be67-a3097b93882a",
+      "name": "AI: Next Questions",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2900,
+        240
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.ANTHROPIC_API_KEY }}"
+            },
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify($input.first().json.request_body) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "a9588dfe-a561-4d21-bba6-8ef245d824b9",
+      "name": "Save Outputs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3120,
+        240
+      ],
+      "parameters": {
+        "jsCode": "const prev = $('Build Next Questions Request').first().json;\nconst nqResponse = $('AI: Next Questions').first().json;\n\nconst pack = prev.updated_pack;\nconst report = prev.merge_report;\nconst round_summary = prev.round_summary;\n\n// Parse next questions from AI response\nconst nqRawText = nqResponse.content && nqResponse.content[0]\n  ? nqResponse.content[0].text\n  : '[]';\n\nlet next_questions = [];\ntry {\n  const nqCleaned = nqRawText.replace(/^```json\\s*/i, '').replace(/\\s*```$/i, '').trim();\n  next_questions = JSON.parse(nqCleaned);\n} catch (e) {\n  next_questions = [{\n    question: 'Error parsing next questions — check raw AI output.',\n    section: 'general',\n    why: 'parse failure: ' + e.message\n  }];\n}\n\nconst packPath    = process.env.ONEIROPHANY_PACK_PATH     || '/data/story_foundation_pack.json';\nconst logPath     = process.env.ONEIROPHANY_LOG_PATH      || '/data/rounds/round_' + pack.version + '.json';\nconst nextQPath   = process.env.ONEIROPHANY_NEXT_Q_PATH   || '/data/next_questions.json';\n\nconst roundLog = {\n  version: pack.version,\n  timestamp: pack.last_modified,\n  round_label: pack.changelog[pack.changelog.length - 1].round_label,\n  summary: round_summary,\n  merge_report: report,\n  next_questions\n};\n\ntry {\n  const fsLib   = require('fs');\n  const pathLib = require('path');\n\n  const logDir = pathLib.dirname(logPath);\n  if (!fsLib.existsSync(logDir)) fsLib.mkdirSync(logDir, { recursive: true });\n\n  // Write master pack — only reached on successful parse + merge\n  fsLib.writeFileSync(packPath, JSON.stringify(pack, null, 2));\n\n  // Write round log\n  fsLib.writeFileSync(logPath, JSON.stringify(roundLog, null, 2));\n\n  // Write next questions (overwrite each round — ephemeral artifact)\n  fsLib.writeFileSync(nextQPath, JSON.stringify(next_questions, null, 2));\n\n} catch (err) {\n  throw new Error('Save Outputs failed: ' + err.message);\n}\n\nreturn [{\n  json: {\n    success: true,\n    version: pack.version,\n    round_summary,\n    ready_for_outline: pack.completeness_status.ready_for_outline,\n    ready_for_drafting: pack.completeness_status.ready_for_drafting,\n    blocking_issues: pack.completeness_status.blocking_issues,\n    next_questions,\n    merge_report: report\n  }\n}];"
+      }
+    },
+    {
+      "id": "73fc3cca-c239-404c-b426-2fd6c3535652",
+      "name": "Error Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2240,
+        520
+      ],
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nconst errorPath = process.env.ONEIROPHANY_ERROR_PATH || '/data/errors';\n\nconst errorRecord = {\n  timestamp: new Date().toISOString(),\n  error_message: data.error_message || 'Unknown error',\n  raw_response: data.raw_response || null\n};\n\ntry {\n  const fsLib = require('fs');\n  if (!fsLib.existsSync(errorPath)) fsLib.mkdirSync(errorPath, { recursive: true });\n  const filename = errorPath + '/error_' + Date.now() + '.json';\n  fsLib.writeFileSync(filename, JSON.stringify(errorRecord, null, 2));\n} catch (writeErr) {\n  console.error('Error Handler: could not write error file:', writeErr.message);\n  console.error('Error details:', JSON.stringify(errorRecord));\n}\n\n// Master pack is NOT written — this node is only reached on error path.\nreturn [{\n  json: {\n    halted: true,\n    reason: 'Parse or validation failure — master pack was NOT updated.',\n    error_message: data.error_message,\n    recovery: 'Check error log in ' + (process.env.ONEIROPHANY_ERROR_PATH || '/data/errors') + ' and retry with corrected input.'\n  }\n}];"
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Input": {
+      "main": [
+        [
+          {
+            "node": "Load Current Pack",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Current Pack": {
+      "main": [
+        [
+          {
+            "node": "Build Normalize Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Normalize Request": {
+      "main": [
+        [
+          {
+            "node": "AI: Normalize Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI: Normalize Text": {
+      "main": [
+        [
+          {
+            "node": "Build Extract Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Extract Request": {
+      "main": [
+        [
+          {
+            "node": "AI: Extract Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI: Extract Payload": {
+      "main": [
+        [
+          {
+            "node": "Parse and Validate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse and Validate": {
+      "main": [
+        [
+          {
+            "node": "IF: Parse Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF: Parse Error": {
+      "main": [
+        [
+          {
+            "node": "Error Handler",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Merge Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Merge Input": {
+      "main": [
+        [
+          {
+            "node": "Merge Patches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Patches": {
+      "main": [
+        [
+          {
+            "node": "Build Next Questions Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Next Questions Request": {
+      "main": [
+        [
+          {
+            "node": "AI: Next Questions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI: Next Questions": {
+      "main": [
+        [
+          {
+            "node": "Save Outputs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "ef4079e6-d2f4-4728-9db5-eef7fafb1564",
+  "meta": {
+    "instanceId": "oneirophany-step2",
+    "templateCredsSetupCompleted": false
+  },
+  "id": "step2-foundation-processor",
+  "tags": [
+    {
+      "name": "oneirophany"
+    },
+    {
+      "name": "step2"
+    }
+  ]
+}
