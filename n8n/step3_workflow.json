@@ -1,40 +1,288 @@
 {
-  "name": "Oneirophany — Step 3 Writing & Polish (Skeleton)",
+  "name": "Oneirophany \u2014 Step 3 Writing & Polish",
   "nodes": [
     {
       "parameters": {
-        "path": "step3-writing-pipeline",
-        "responseMode": "lastNode",
-        "responseData": "allEntries",
-        "httpMethod": "POST",
+        "formTitle": "Oneirophany \u2014 Step 3: Writing & Polish",
+        "formDescription": "Generates a chapter blueprint, drafts prose, critiques and revises it, then produces a final smoothed chapter. Two human-approval gates included.",
+        "formFields": {
+          "values": [
+            {
+              "fieldName": "Project ID",
+              "fieldLabel": "ProjectId",
+              "placeholder": "Short project identifier, e.g. my-novel",
+              "requiredField": true
+            },
+            {
+              "fieldName": "Book Title",
+              "fieldLabel": "BookTitle",
+              "placeholder": "Used to name output docs",
+              "requiredField": true
+            },
+            {
+              "fieldName": "Output Folder ID",
+              "fieldLabel": "OutputFolderId",
+              "placeholder": "Google Drive folder ID for created docs",
+              "requiredField": true
+            },
+            {
+              "fieldName": "Chapter Number",
+              "fieldLabel": "ChapterNumber",
+              "placeholder": "e.g. 3",
+              "requiredField": true
+            },
+            {
+              "fieldName": "Mode",
+              "fieldLabel": "Mode",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "draft"
+                  },
+                  {
+                    "option": "outline"
+                  }
+                ]
+              },
+              "requiredField": true
+            },
+            {
+              "fieldName": "Story Foundation Pack Doc ID",
+              "fieldLabel": "StoryFoundationPackDocId",
+              "placeholder": "Google Doc ID containing the Step 2 updated_pack JSON",
+              "requiredField": true
+            },
+            {
+              "fieldName": "Approved Outline Doc ID",
+              "fieldLabel": "ApprovedOutlineDocId",
+              "placeholder": "Google Doc ID with approved outline (leave blank if none)"
+            },
+            {
+              "fieldName": "Scene Targets",
+              "fieldLabel": "SceneTargets",
+              "placeholder": "JSON array or comma-separated list of scene targets (optional)"
+            },
+            {
+              "fieldName": "Focus Notes",
+              "fieldLabel": "FocusNotes",
+              "placeholder": "Optional notes for this chapter"
+            }
+          ]
+        },
         "options": {}
       },
-      "id": "step3-webhook-node",
-      "name": "Webhook",
-      "type": "n8n-nodes-base.webhook",
-      "typeVersion": 1.1,
-      "position": [260, 360],
+      "id": "step3-form-trigger-node",
+      "name": "Start Writing Pipeline",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.4,
+      "position": [
+        260,
+        400
+      ],
       "webhookId": "oneirophany-step3-writing-pipeline"
     },
     {
       "parameters": {
-        "jsCode": "const body = $input.first().json.body || $input.first().json;\n\nconst project_id = String(body.project_id || '').trim();\nconst chapter_number = Number(body.chapter_number);\nconst mode = String(body.mode || 'draft').trim();\nconst scene_targets = Array.isArray(body.scene_targets) ? body.scene_targets : [];\nconst focus_notes = String(body.focus_notes || '').trim();\n\nif (!project_id) throw new Error('project_id is required');\nif (!Number.isFinite(chapter_number) || chapter_number < 1) throw new Error('chapter_number must be a positive number');\nif (!['outline', 'draft'].includes(mode)) throw new Error('mode must be outline or draft');\n\nif (!body.story_foundation_pack || typeof body.story_foundation_pack !== 'object') {\n  throw new Error(\n    'Validation failed: story_foundation_pack is missing or not an object. ' +\n    'Send the pack JSON from Step 2 as story_foundation_pack.'\n  );\n}\n\nconst approved_outline = body.approved_outline || null;\nconst scene_cards = Array.isArray(body.scene_cards) ? body.scene_cards : [];\n\nreturn [{ json: { project_id, chapter_number, mode, scene_targets, focus_notes, story_foundation_pack: body.story_foundation_pack, approved_outline, scene_cards } }];"
+        "operation": "get",
+        "documentURL": "={{ $('Start Writing Pipeline').item.json['Story Foundation Pack Doc ID'] }}"
+      },
+      "id": "step3-load-pack-node",
+      "name": "Load Pack",
+      "type": "n8n-nodes-base.googleDocs",
+      "typeVersion": 2,
+      "position": [
+        520,
+        400
+      ],
+      "credentials": {
+        "googleDocsOAuth2Api": {
+          "id": "r2zT6MOWlh8t9hDn",
+          "name": "Google Docs account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "step3-has-outline-cond-0",
+              "leftValue": "={{ $('Start Writing Pipeline').item.json['Approved Outline Doc ID'] }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "step3-if-has-outline-node",
+      "name": "IF: Has Approved Outline?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        780,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "documentURL": "={{ $('Start Writing Pipeline').item.json['Approved Outline Doc ID'] }}"
+      },
+      "id": "step3-load-outline-node",
+      "name": "Load Approved Outline",
+      "type": "n8n-nodes-base.googleDocs",
+      "typeVersion": 2,
+      "position": [
+        1040,
+        280
+      ],
+      "credentials": {
+        "googleDocsOAuth2Api": {
+          "id": "r2zT6MOWlh8t9hDn",
+          "name": "Google Docs account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { approved_outline: $input.first().json.content || null } }];"
+      },
+      "id": "step3-extract-outline-node",
+      "name": "Extract Outline",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1300,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { approved_outline: null } }];"
+      },
+      "id": "step3-skip-outline-node",
+      "name": "Skip Outline",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1040,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "chooseBranch"
+      },
+      "id": "step3-merge-outline-paths-node",
+      "name": "Merge Outline Paths",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        1560,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const form = $('Start Writing Pipeline').item.json;\nconst packDoc = $('Load Pack').first().json;\nconst outlineData = $input.first().json;\n\nconst project_id = String(form['Project ID'] || '').trim();\nconst book_title = String(form['Book Title'] || '').trim();\nconst output_folder_id = String(form['Output Folder ID'] || '').trim();\nconst chapter_number = Number(form['Chapter Number']);\nconst mode = String(form['Mode'] || 'draft').trim().toLowerCase();\n\nif (!project_id) throw new Error('Project ID is required');\nif (!book_title) throw new Error('Book Title is required');\nif (!output_folder_id) throw new Error('Output Folder ID is required');\nif (!Number.isFinite(chapter_number) || chapter_number < 1)\n  throw new Error('Chapter Number must be a positive integer');\nif (!['outline', 'draft'].includes(mode))\n  throw new Error('Mode must be \"outline\" or \"draft\"');\n\nlet story_foundation_pack;\ntry {\n  story_foundation_pack = JSON.parse(packDoc.content);\n} catch (e) {\n  throw new Error('Failed to parse Story Foundation Pack from Google Doc: ' + e.message);\n}\n\nconst approved_outline = outlineData.approved_outline || null;\n\nconst scene_targets_raw = String(form['Scene Targets'] || '').trim();\nlet scene_targets = [];\nif (scene_targets_raw) {\n  try { scene_targets = JSON.parse(scene_targets_raw); }\n  catch (e) { scene_targets = scene_targets_raw.split(',').map(s => s.trim()).filter(Boolean); }\n}\n\nconst focus_notes = String(form['Focus Notes'] || '').trim();\n\nreturn [{ json: { project_id, book_title, output_folder_id, chapter_number, mode,\n                  scene_targets, focus_notes, story_foundation_pack, approved_outline,\n                  scene_cards: [] } }];"
       },
       "id": "step3-validate-intake-node",
       "name": "Validate Intake",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [500, 360]
+      "position": [
+        1820,
+        400
+      ]
     },
     {
       "parameters": {
-        "jsCode": "const req = $('Validate Intake').first().json;\n\nreturn [{\n  json: {\n    ...req,\n    story_foundation_pack: req.story_foundation_pack,\n    approved_outline: req.approved_outline,\n    scene_cards: req.scene_cards\n  }\n}];"
+        "method": "POST",
+        "url": "=https://www.googleapis.com/drive/v3/files?supportsAllDrives=true",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleDriveOAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"name\": \"{{ $json.book_title }} - Ch.{{ $json.chapter_number }} Blueprint\",\n  \"mimeType\": \"application/vnd.google-apps.document\",\n  \"parents\": [\"{{ $json.output_folder_id }}\"]\n}",
+        "options": {}
+      },
+      "id": "step3-create-blueprint-doc-node",
+      "name": "Create Blueprint Doc",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2080,
+        400
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "kkL7dT8eN7qtyx7E",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://www.googleapis.com/drive/v3/files?supportsAllDrives=true",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleDriveOAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"name\": \"{{ $json.book_title }} - Ch.{{ $json.chapter_number }} Final Draft\",\n  \"mimeType\": \"application/vnd.google-apps.document\",\n  \"parents\": [\"{{ $json.output_folder_id }}\"]\n}",
+        "options": {}
+      },
+      "id": "step3-create-final-draft-doc-node",
+      "name": "Create Final Draft Doc",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2340,
+        400
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "kkL7dT8eN7qtyx7E",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const prev = $('Validate Intake').first().json;\nconst blueprintDoc = $('Create Blueprint Doc').first().json;\nconst finalDraftDoc = $('Create Final Draft Doc').first().json;\nreturn [{ json: { ...prev, blueprint_doc_id: blueprintDoc.id, final_draft_doc_id: finalDraftDoc.id } }];"
+      },
+      "id": "step3-collect-doc-ids-node",
+      "name": "Collect Output Doc IDs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2600,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const req = $('Collect Output Doc IDs').first().json;\nreturn [{ json: req }];"
       },
       "id": "step3-load-authority-context-node",
       "name": "Load Authority Context",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [760, 360]
+      "position": [
+        2860,
+        400
+      ]
     },
     {
       "parameters": {
@@ -44,7 +292,10 @@
       "name": "Compute Readiness",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1020, 360]
+      "position": [
+        3120,
+        400
+      ]
     },
     {
       "parameters": {
@@ -66,33 +317,43 @@
             }
           ],
           "combinator": "and"
-        }
+        },
+        "options": {}
       },
       "id": "step3-if-readiness-node",
       "name": "IF Ready For Stage",
       "type": "n8n-nodes-base.if",
-      "typeVersion": 2,
-      "position": [1260, 360]
+      "typeVersion": 2.2,
+      "position": [
+        3380,
+        400
+      ]
     },
     {
       "parameters": {
-        "jsCode": "const d = $('Compute Readiness').first().json;\nreturn [{\n  json: {\n    success: false,\n    halted: true,\n    reason: 'Readiness gate failed',\n    mode: d.mode,\n    readiness_snapshot: d.readiness_snapshot\n  }\n}];"
+        "jsCode": "const d = $('Compute Readiness').first().json;\nreturn [{ json: { success: false, halted: true, reason: 'Readiness gate failed',\n                  mode: d.mode, readiness_snapshot: d.readiness_snapshot } }];"
       },
       "id": "step3-gate-fail-output-node",
       "name": "Gate Fail Output",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1500, 220]
+      "position": [
+        3640,
+        260
+      ]
     },
     {
       "parameters": {
-        "jsCode": "const d = $('Compute Readiness').first().json;\nconst pack = d.story_foundation_pack;\n\nconst compressed_context_pack = {\n  project_core: pack.project_core || {},\n  world_foundation: pack.world_foundation || {},\n  story_engine: pack.story_engine || {},\n  character_system: pack.character_system || {},\n  plot_frame: pack.plot_frame || {},\n  ending_design: pack.ending_design || {},\n  author_preferences: pack.author_preferences || {},\n  approved_outline: d.approved_outline,\n  chapter_target: {\n    chapter_number: d.chapter_number,\n    scene_targets: d.scene_targets,\n    focus_notes: d.focus_notes\n  }\n};\n\nreturn [{ json: { ...d, compressed_context_pack } }];"
+        "jsCode": "const d = $('Compute Readiness').first().json;\nconst pack = d.story_foundation_pack;\n\nconst compressed_context_pack = {\n  project_core:      pack.project_core || {},\n  world_foundation:  pack.world_foundation || {},\n  story_engine:      pack.story_engine || {},\n  character_system:  pack.character_system || {},\n  plot_frame:        pack.plot_frame || {},\n  ending_design:     pack.ending_design || {},\n  author_preferences: pack.author_preferences || {},\n  approved_outline:  d.approved_outline,\n  chapter_target: {\n    chapter_number: d.chapter_number,\n    scene_targets:  d.scene_targets,\n    focus_notes:    d.focus_notes\n  }\n};\n\nreturn [{ json: { ...d, compressed_context_pack } }];"
       },
       "id": "step3-build-context-pack-node",
       "name": "Build Context Pack",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1500, 500]
+      "position": [
+        3640,
+        540
+      ]
     },
     {
       "parameters": {
@@ -102,7 +363,10 @@
       "name": "Build Blueprint Request",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1760, 500]
+      "position": [
+        3900,
+        540
+      ]
     },
     {
       "parameters": {
@@ -135,7 +399,10 @@
       "name": "AI: Generate Blueprint",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2020, 500]
+      "position": [
+        4160,
+        540
+      ]
     },
     {
       "parameters": {
@@ -145,7 +412,10 @@
       "name": "Parse Blueprint",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2280, 500]
+      "position": [
+        4420,
+        540
+      ]
     },
     {
       "parameters": {
@@ -167,13 +437,17 @@
             }
           ],
           "combinator": "and"
-        }
+        },
+        "options": {}
       },
       "id": "step3-if-blueprint-parse-error-node",
       "name": "IF Blueprint Parse Error",
       "type": "n8n-nodes-base.if",
-      "typeVersion": 2,
-      "position": [2520, 500]
+      "typeVersion": 2.2,
+      "position": [
+        4680,
+        540
+      ]
     },
     {
       "parameters": {
@@ -183,7 +457,38 @@
       "name": "Blueprint Parse Fail Output",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2760, 360]
+      "position": [
+        4940,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentURL": "={{ $json.blueprint_doc_id }}",
+        "actionsUi": {
+          "actionFields": [
+            {
+              "action": "insert",
+              "text": "=# Chapter {{ $json.chapter_number }} \u2014 Blueprint\n\nProject: {{ $json.project_id }}\nGenerated: {{ new Date().toISOString().split('T')[0] }}\n\n---\n\n```json\n{{ JSON.stringify($json.chapter_blueprint, null, 2) }}\n```\n"
+            }
+          ]
+        }
+      },
+      "id": "step3-save-blueprint-node",
+      "name": "Save Blueprint",
+      "type": "n8n-nodes-base.googleDocs",
+      "typeVersion": 2,
+      "position": [
+        4940,
+        680
+      ],
+      "credentials": {
+        "googleDocsOAuth2Api": {
+          "id": "r2zT6MOWlh8t9hDn",
+          "name": "Google Docs account"
+        }
+      }
     },
     {
       "parameters": {
@@ -193,17 +498,23 @@
       "name": "Human Gate: Blueprint Approval",
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1.1,
-      "position": [2760, 640]
+      "position": [
+        5200,
+        680
+      ]
     },
     {
       "parameters": {
-        "jsCode": "const d = $('Parse Blueprint').first().json;\n\n// TODO: Replace with real human decision input source.\n// Expected fields from reviewer:\n// approval_status: approved | rejected\n// approval_notes: string\nconst approval_status = 'approved';\nconst approval_notes = 'placeholder';\n\nreturn [{ json: { ...d, approval_status, approval_notes } }];"
+        "jsCode": "const d = $('Parse Blueprint').first().json;\nconst resumeData = $input.first().json;\n\n// Reads approval_status and approval_notes from the wait-node resume webhook payload.\n// POST { \"approval_status\": \"approved\", \"approval_notes\": \"...\" } to the resume URL.\nconst approval_status = String(resumeData.approval_status || 'rejected').toLowerCase();\nconst approval_notes = String(resumeData.approval_notes || '');\n\nreturn [{ json: { ...d, approval_status, approval_notes } }];"
       },
       "id": "step3-capture-blueprint-decision-node",
       "name": "Capture Blueprint Decision",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [3000, 640]
+      "position": [
+        5460,
+        680
+      ]
     },
     {
       "parameters": {
@@ -225,13 +536,17 @@
             }
           ],
           "combinator": "and"
-        }
+        },
+        "options": {}
       },
       "id": "step3-if-blueprint-approved-node",
       "name": "IF Blueprint Approved",
       "type": "n8n-nodes-base.if",
-      "typeVersion": 2,
-      "position": [3240, 640]
+      "typeVersion": 2.2,
+      "position": [
+        5720,
+        680
+      ]
     },
     {
       "parameters": {
@@ -241,7 +556,10 @@
       "name": "Blueprint Rejected Output",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [3480, 520]
+      "position": [
+        5980,
+        540
+      ]
     },
     {
       "parameters": {
@@ -251,7 +569,10 @@
       "name": "Build Draft Request",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [3480, 760]
+      "position": [
+        5980,
+        820
+      ]
     },
     {
       "parameters": {
@@ -284,7 +605,10 @@
       "name": "AI: Draft Prose",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [3740, 760]
+      "position": [
+        6240,
+        820
+      ]
     },
     {
       "parameters": {
@@ -294,7 +618,10 @@
       "name": "Extract Draft",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [4000, 760]
+      "position": [
+        6500,
+        820
+      ]
     },
     {
       "parameters": {
@@ -304,7 +631,10 @@
       "name": "Build Critique Request",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [4260, 760]
+      "position": [
+        6760,
+        820
+      ]
     },
     {
       "parameters": {
@@ -337,7 +667,10 @@
       "name": "AI: Critique Only",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [4520, 760]
+      "position": [
+        7020,
+        820
+      ]
     },
     {
       "parameters": {
@@ -347,7 +680,10 @@
       "name": "Parse Critique",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [4780, 760]
+      "position": [
+        7280,
+        820
+      ]
     },
     {
       "parameters": {
@@ -357,7 +693,10 @@
       "name": "Build Fix Request",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [5040, 760]
+      "position": [
+        7540,
+        820
+      ]
     },
     {
       "parameters": {
@@ -390,7 +729,10 @@
       "name": "AI: Apply Fixes",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [5300, 760]
+      "position": [
+        7800,
+        820
+      ]
     },
     {
       "parameters": {
@@ -400,7 +742,38 @@
       "name": "Extract Revised Draft",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [5560, 760]
+      "position": [
+        8060,
+        820
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentURL": "={{ $json.final_draft_doc_id }}",
+        "actionsUi": {
+          "actionFields": [
+            {
+              "action": "insert",
+              "text": "=# Chapter {{ $json.chapter_number }} \u2014 Revised Draft (Pending Final Smoothing)\n\nSaved: {{ new Date().toISOString().split('T')[0] }}\n\n---\n\n{{ $json.revised_draft }}\n"
+            }
+          ]
+        }
+      },
+      "id": "step3-save-revised-draft-node",
+      "name": "Save Revised Draft",
+      "type": "n8n-nodes-base.googleDocs",
+      "typeVersion": 2,
+      "position": [
+        8320,
+        820
+      ],
+      "credentials": {
+        "googleDocsOAuth2Api": {
+          "id": "r2zT6MOWlh8t9hDn",
+          "name": "Google Docs account"
+        }
+      }
     },
     {
       "parameters": {
@@ -410,17 +783,23 @@
       "name": "Human Gate: Post-Fix Review",
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1.1,
-      "position": [5820, 760]
+      "position": [
+        8580,
+        820
+      ]
     },
     {
       "parameters": {
-        "jsCode": "const d = $('Extract Revised Draft').first().json;\n\n// TODO: replace with real reviewer decision source\nconst approval_status = 'approved';\nconst approval_notes = 'placeholder';\n\nreturn [{ json: { ...d, post_fix_approval_status: approval_status, post_fix_approval_notes: approval_notes } }];"
+        "jsCode": "const d = $('Extract Revised Draft').first().json;\nconst resumeData = $input.first().json;\n\n// POST { \"approval_status\": \"approved\", \"approval_notes\": \"...\" } to the resume URL.\nconst approval_status = String(resumeData.approval_status || 'rejected').toLowerCase();\nconst approval_notes = String(resumeData.approval_notes || '');\n\nreturn [{ json: { ...d, post_fix_approval_status: approval_status, post_fix_approval_notes: approval_notes } }];"
       },
       "id": "step3-capture-postfix-decision-node",
       "name": "Capture Post-Fix Decision",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [6060, 760]
+      "position": [
+        8840,
+        820
+      ]
     },
     {
       "parameters": {
@@ -442,13 +821,17 @@
             }
           ],
           "combinator": "and"
-        }
+        },
+        "options": {}
       },
       "id": "step3-if-postfix-approved-node",
       "name": "IF Post-Fix Approved",
       "type": "n8n-nodes-base.if",
-      "typeVersion": 2,
-      "position": [6300, 760]
+      "typeVersion": 2.2,
+      "position": [
+        9100,
+        820
+      ]
     },
     {
       "parameters": {
@@ -458,7 +841,10 @@
       "name": "Post-Fix Rejected Output",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [6540, 640]
+      "position": [
+        9360,
+        680
+      ]
     },
     {
       "parameters": {
@@ -468,7 +854,10 @@
       "name": "Build Final Smoothing Request",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [6540, 900]
+      "position": [
+        9360,
+        960
+      ]
     },
     {
       "parameters": {
@@ -501,7 +890,10 @@
       "name": "AI: Final Smoothing",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [6800, 900]
+      "position": [
+        9620,
+        960
+      ]
     },
     {
       "parameters": {
@@ -511,21 +903,128 @@
       "name": "Extract Final Draft",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [7060, 900]
+      "position": [
+        9880,
+        960
+      ]
     },
     {
       "parameters": {
-        "jsCode": "const d = $('Extract Final Draft').first().json;\n\n// TODO: Replace with Google Docs/Drive export node(s).\n// This skeleton returns payload only and does not persist externally.\nconst export_record = {\n  project_id: d.project_id,\n  chapter_number: d.chapter_number,\n  exported_at: new Date().toISOString(),\n  final_draft: d.final_draft\n};\n\nreturn [{\n  json: {\n    success: true,\n    project_id: d.project_id,\n    chapter_number: d.chapter_number,\n    mode: d.mode,\n    merge_ready_state: d.readiness_snapshot,\n    blueprint_approval_notes: d.approval_notes || '',\n    post_fix_approval_notes: d.post_fix_approval_notes || '',\n    critique_report: d.critique_report || {},\n    export_record\n  }\n}];"
+        "operation": "update",
+        "documentURL": "={{ $json.final_draft_doc_id }}",
+        "actionsUi": {
+          "actionFields": [
+            {
+              "action": "insert",
+              "text": "=\n\n---\n\n# Chapter {{ $json.chapter_number }} \u2014 Final Draft\n\nSaved: {{ new Date().toISOString().split('T')[0] }}\n\n---\n\n{{ $json.final_draft }}\n"
+            }
+          ]
+        }
+      },
+      "id": "step3-save-final-draft-node",
+      "name": "Save Final Draft",
+      "type": "n8n-nodes-base.googleDocs",
+      "typeVersion": 2,
+      "position": [
+        10140,
+        960
+      ],
+      "credentials": {
+        "googleDocsOAuth2Api": {
+          "id": "r2zT6MOWlh8t9hDn",
+          "name": "Google Docs account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $('Extract Final Draft').first().json;\n\nreturn [{\n  json: {\n    success: true,\n    project_id: d.project_id,\n    book_title: d.book_title,\n    chapter_number: d.chapter_number,\n    mode: d.mode,\n    merge_ready_state: d.readiness_snapshot,\n    blueprint_approval_notes: d.approval_notes || '',\n    post_fix_approval_notes: d.post_fix_approval_notes || '',\n    critique_report: d.critique_report || {},\n    blueprint_doc_id: d.blueprint_doc_id,\n    final_draft_doc_id: d.final_draft_doc_id\n  }\n}];"
       },
       "id": "step3-export-and-summary-node",
       "name": "Export + Summary",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [7320, 900]
+      "position": [
+        10400,
+        960
+      ]
     }
   ],
   "connections": {
-    "Webhook": {
+    "Start Writing Pipeline": {
+      "main": [
+        [
+          {
+            "node": "Load Pack",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Pack": {
+      "main": [
+        [
+          {
+            "node": "IF: Has Approved Outline?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF: Has Approved Outline?": {
+      "main": [
+        [
+          {
+            "node": "Load Approved Outline",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Skip Outline",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Approved Outline": {
+      "main": [
+        [
+          {
+            "node": "Extract Outline",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Outline": {
+      "main": [
+        [
+          {
+            "node": "Merge Outline Paths",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Skip Outline": {
+      "main": [
+        [
+          {
+            "node": "Merge Outline Paths",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Outline Paths": {
       "main": [
         [
           {
@@ -537,6 +1036,39 @@
       ]
     },
     "Validate Intake": {
+      "main": [
+        [
+          {
+            "node": "Create Blueprint Doc",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Blueprint Doc": {
+      "main": [
+        [
+          {
+            "node": "Create Final Draft Doc",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Final Draft Doc": {
+      "main": [
+        [
+          {
+            "node": "Collect Output Doc IDs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect Output Doc IDs": {
       "main": [
         [
           {
@@ -640,6 +1172,17 @@
             "index": 0
           }
         ],
+        [
+          {
+            "node": "Save Blueprint",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Blueprint": {
+      "main": [
         [
           {
             "node": "Human Gate: Blueprint Approval",
@@ -781,6 +1324,17 @@
       "main": [
         [
           {
+            "node": "Save Revised Draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Revised Draft": {
+      "main": [
+        [
+          {
             "node": "Human Gate: Post-Fix Review",
             "type": "main",
             "index": 0
@@ -854,6 +1408,17 @@
       "main": [
         [
           {
+            "node": "Save Final Draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Final Draft": {
+      "main": [
+        [
+          {
             "node": "Export + Summary",
             "type": "main",
             "index": 0
@@ -868,20 +1433,17 @@
     "saveManualExecutions": true
   },
   "active": false,
-  "versionId": "step3-skeleton-version-id",
+  "versionId": "step3-v2-cloud-compatible",
   "meta": {
-    "instanceId": "oneirophany-step3-skeleton"
+    "instanceId": "oneirophany-step3"
   },
-  "id": "oneirophany-step3-skeleton",
+  "id": "oneirophany-step3",
   "tags": [
     {
       "name": "oneirophany"
     },
     {
       "name": "step3"
-    },
-    {
-      "name": "skeleton"
     }
   ]
 }
