@@ -1,9 +1,9 @@
 {
-  "name": "Oneirophany \u2014 Step 3 Writing & Polish",
+  "name": "Oneirophany — Step 3 Writing & Polish",
   "nodes": [
     {
       "parameters": {
-        "formTitle": "Oneirophany \u2014 Step 3: Writing & Polish",
+        "formTitle": "Oneirophany — Step 3: Writing & Polish",
         "formDescription": "Generates a chapter blueprint, drafts prose, critiques and revises it, then produces a final smoothed chapter. Two human-approval gates included.",
         "formFields": {
           "values": [
@@ -357,7 +357,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const d = $('Build Context Pack').first().json;\nconst system = [\n  'You create chapter blueprints only.',\n  'Return JSON only.',\n  'Do not draft prose in this step.'\n].join('\\n');\n\nconst user = [\n  `Project: ${d.project_id}`,\n  `Chapter: ${d.chapter_number}`,\n  '',\n  'Compressed context pack:',\n  JSON.stringify(d.compressed_context_pack, null, 2),\n  '',\n  'Return blueprint JSON with keys:',\n  '- chapter_objective',\n  '- scene_sequence (array)',\n  '- continuity_requirements (array)',\n  '- pov_tense_voice'\n].join('\\n');\n\nreturn [{\n  json: {\n    ...d,\n    request_body: {\n      model: 'claude-sonnet-4-6',\n      max_tokens: 4096,\n      system,\n      messages: [{ role: 'user', content: user }]\n    }\n  }\n}];"
+        "jsCode": "const d = $('Build Context Pack').first().json;\nconst pack = d.compressed_context_pack;\nconst prefs = pack.author_preferences || {};\n\nconst system = [\n  'You are a chapter blueprint architect for a fiction production pipeline.',\n  'Your job is to plan ONE chapter in precise, actionable detail.',\n  '',\n  'Rules:',\n  '- Return valid JSON only. No prose, no explanation outside the JSON.',\n  '- Each scene must have a clear dramatic purpose — no filler scenes.',\n  \"- Respect the author's stated POV, tense, and prose register.\",\n  '- Flag any continuity risks with existing canon.',\n  '- Scene word counts should sum to the chapter length target if provided.',\n  '- Do NOT invent new characters, locations, or world rules not in the foundation pack.',\n  '',\n  'Return blueprint JSON with these keys:',\n  '  chapter_objective: string — the single dramatic question this chapter answers',\n  '  opening_hook: string — how the chapter opens (first paragraph intent)',\n  '  scene_sequence: array of objects, each with:',\n  '    scene_number: int',\n  '    location: string',\n  '    pov_character: string',\n  '    characters_present: [string]',\n  '    scene_objective: string — what changes by scene end',\n  '    emotional_arc: string — e.g. \"tension builds to dread\"',\n  '    key_beats: [string] — 3-5 specific things that happen',\n  '    target_word_count: int',\n  '  continuity_requirements: [string] — canon facts this chapter must respect',\n  '  pov_tense_voice: { pov, tense, register } — from author preferences',\n  '  chapter_end_state: string — where the reader is left emotionally'\n].join('\\n');\n\nconst user = [\n  'Project: ' + d.project_id,\n  'Chapter: ' + d.chapter_number,\n  d.focus_notes ? 'Focus notes: ' + d.focus_notes : '',\n  d.scene_targets && d.scene_targets.length > 0 ? 'Scene targets: ' + JSON.stringify(d.scene_targets) : '',\n  '',\n  'Story foundation (compressed):',\n  JSON.stringify(pack, null, 2)\n].filter(Boolean).join('\\n');\n\nreturn [{\n  json: {\n    ...d,\n    request_body: {\n      model: 'claude-sonnet-4-6',\n      max_tokens: 4096,\n      system,\n      messages: [{ role: 'user', content: user }]\n    }\n  }\n}];"
       },
       "id": "step3-build-blueprint-request-node",
       "name": "Build Blueprint Request",
@@ -470,7 +470,7 @@
           "actionFields": [
             {
               "action": "insert",
-              "text": "=# Chapter {{ $json.chapter_number }} \u2014 Blueprint\n\nProject: {{ $json.project_id }}\nGenerated: {{ new Date().toISOString().split('T')[0] }}\n\n---\n\n```json\n{{ JSON.stringify($json.chapter_blueprint, null, 2) }}\n```\n"
+              "text": "=# Chapter {{ $json.chapter_number }} — Blueprint\n\nProject: {{ $json.project_id }}\nGenerated: {{ new Date().toISOString().split('T')[0] }}\n\n---\n\n```json\n{{ JSON.stringify($json.chapter_blueprint, null, 2) }}\n```\n"
             }
           ]
         }
@@ -563,7 +563,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const d = $('Capture Blueprint Decision').first().json;\nconst system = 'Draft chapter prose from approved blueprint only. Return plain text prose.';\nconst user = [\n  `Chapter: ${d.chapter_number}`,\n  'Approved blueprint:',\n  JSON.stringify(d.chapter_blueprint, null, 2),\n  '',\n  'Constraints:',\n  '- Keep canon consistency',\n  '- Match author preferences',\n  '- Preserve required payoffs where applicable'\n].join('\\n');\n\nreturn [{\n  json: {\n    ...d,\n    request_body: {\n      model: 'claude-sonnet-4-6',\n      max_tokens: 8192,\n      system,\n      messages: [{ role: 'user', content: user }]\n    }\n  }\n}];"
+        "jsCode": "const d = $('Capture Blueprint Decision').first().json;\nconst pack = d.compressed_context_pack || {};\nconst prefs = pack.author_preferences || {};\n\nconst prefsSummary = [];\nif (prefs.pov_preference && prefs.pov_preference.value) prefsSummary.push('POV: ' + prefs.pov_preference.value);\nif (prefs.tense_preference && prefs.tense_preference.value) prefsSummary.push('Tense: ' + prefs.tense_preference.value);\nif (prefs.prose_register && prefs.prose_register.value) prefsSummary.push('Register: ' + prefs.prose_register.value);\nif (prefs.chapter_length_target && prefs.chapter_length_target.value) prefsSummary.push('Target length: ' + prefs.chapter_length_target.value);\nif (prefs.must_avoid && prefs.must_avoid.value && prefs.must_avoid.value.length > 0) prefsSummary.push('Must avoid: ' + prefs.must_avoid.value.join(', '));\nif (prefs.style_preferences && prefs.style_preferences.value && prefs.style_preferences.value.length > 0) prefsSummary.push('Style: ' + prefs.style_preferences.value.join(', '));\n\nconst system = [\n  'You are a fiction prose drafter working from an approved chapter blueprint.',\n  '',\n  'Rules:',\n  '- Write the complete chapter prose. No placeholders, no summaries, no meta-commentary.',\n  '- Follow the blueprint scene sequence exactly. Do not skip or reorder scenes.',\n  \"- Match the author's stated POV, tense, and prose register precisely.\",\n  '- Maintain canon consistency — do not contradict the story foundation.',\n  '- Show, do not tell. Use concrete sensory detail.',\n  '- Dialogue should sound distinct per character.',\n  '- Scene transitions should be clean. Use whitespace breaks (***) between scenes.',\n  '- Do NOT include chapter titles, scene numbers, or metadata in the output.',\n  '- Return plain prose text only.'\n].join('\\n');\n\nconst user = [\n  'Chapter ' + d.chapter_number,\n  '',\n  'Author preferences:',\n  prefsSummary.length > 0 ? prefsSummary.join('\\n') : 'None specified',\n  '',\n  'Approved blueprint:',\n  JSON.stringify(d.chapter_blueprint, null, 2),\n  '',\n  d.approval_notes ? 'Author notes from blueprint approval: ' + d.approval_notes : '',\n  '',\n  'Write the complete chapter now.'\n].filter(Boolean).join('\\n');\n\nreturn [{\n  json: {\n    ...d,\n    request_body: {\n      model: 'claude-sonnet-4-6',\n      max_tokens: 8192,\n      system,\n      messages: [{ role: 'user', content: user }]\n    }\n  }\n}];"
       },
       "id": "step3-build-draft-request-node",
       "name": "Build Draft Request",
@@ -625,7 +625,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const d = $('Extract Draft').first().json;\nconst system = [\n  'You are a critique engine.',\n  'Do not rewrite.',\n  'Return JSON only with issue list and fix plan.'\n].join('\\n');\nconst user = [\n  'Draft:',\n  d.draft_text,\n  '',\n  'Return JSON:',\n  '{ issues:[{type,severity,location,description,fix_plan}], summary }'\n].join('\\n');\n\nreturn [{\n  json: {\n    ...d,\n    request_body: {\n      model: 'claude-sonnet-4-6',\n      max_tokens: 4096,\n      system,\n      messages: [{ role: 'user', content: user }]\n    }\n  }\n}];"
+        "jsCode": "const d = $('Extract Draft').first().json;\n\nconst system = [\n  'You are a developmental editor and prose critic.',\n  'Your job is to find specific, fixable issues in this draft chapter.',\n  '',\n  'Do NOT rewrite any prose. Return a JSON critique report only.',\n  '',\n  'Evaluate these categories:',\n  '1. CANON: Facts that contradict the story foundation or blueprint',\n  '2. CONTINUITY: Internal inconsistencies within the chapter',\n  '3. VOICE: Deviations from the stated POV, tense, or register',\n  '4. PACING: Scenes that drag, rush, or lack purpose',\n  '5. DIALOGUE: Lines that sound generic, out of character, or expository',\n  '6. PROSE: Purple prose, cliches, AI-isms (e.g. \"a tapestry of\", \"couldn\\'t help but\"), telling instead of showing',\n  '7. EMOTION: Emotional beats that are stated rather than earned',\n  '',\n  'Severity levels: critical (must fix), major (should fix), minor (nice to fix)',\n  '',\n  'Return JSON only:',\n  '{',\n  '  \"issues\": [{ \"type\": string, \"severity\": string, \"location\": string, \"description\": string, \"fix_plan\": string }],',\n  '  \"strengths\": [string — what works well and should be preserved],',\n  '  \"summary\": string',\n  '}'\n].join('\\n');\n\nconst user = [\n  'Chapter ' + d.chapter_number + ' draft:',\n  '',\n  d.draft_text,\n  '',\n  'Blueprint for reference:',\n  JSON.stringify(d.chapter_blueprint, null, 2)\n].join('\\n');\n\nreturn [{\n  json: {\n    ...d,\n    request_body: {\n      model: 'claude-sonnet-4-6',\n      max_tokens: 4096,\n      system,\n      messages: [{ role: 'user', content: user }]\n    }\n  }\n}];"
       },
       "id": "step3-build-critique-request-node",
       "name": "Build Critique Request",
@@ -687,7 +687,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const d = $('Parse Critique').first().json;\nconst system = 'Apply fixes from critique report to draft. Return revised draft text only.';\nconst user = [\n  'Original draft:',\n  d.draft_text,\n  '',\n  'Critique report:',\n  JSON.stringify(d.critique_report, null, 2),\n  '',\n  'Apply fix plan and return revised draft only.'\n].join('\\n');\n\nreturn [{\n  json: {\n    ...d,\n    request_body: {\n      model: 'claude-sonnet-4-6',\n      max_tokens: 8192,\n      system,\n      messages: [{ role: 'user', content: user }]\n    }\n  }\n}];"
+        "jsCode": "const d = $('Parse Critique').first().json;\nconst criticalAndMajor = (d.critique_report.issues || [])\n  .filter(i => i.severity === 'critical' || i.severity === 'major');\n\nconst system = [\n  'You are a prose revision specialist.',\n  'Apply the fix plans from the critique report to the draft.',\n  '',\n  'Rules:',\n  '- Fix all critical and major issues. Fix minor issues only if the fix is obvious.',\n  '- Preserve everything that works well (see strengths list).',\n  '- Do not add new scenes, characters, or plot points.',\n  '- Do not change the chapter structure or scene sequence.',\n  '- Maintain the same POV, tense, and register as the original.',\n  '- Return the complete revised chapter text. No summaries of changes.',\n  '- Return plain prose text only. No metadata.'\n].join('\\n');\n\nconst user = [\n  'Original draft:',\n  d.draft_text,\n  '',\n  'Issues to fix (' + criticalAndMajor.length + ' critical/major):',\n  JSON.stringify(d.critique_report.issues, null, 2),\n  '',\n  'Strengths to preserve:',\n  JSON.stringify(d.critique_report.strengths || [], null, 2),\n  '',\n  'Blueprint for reference:',\n  JSON.stringify(d.chapter_blueprint, null, 2),\n  '',\n  'Apply fixes and return the complete revised chapter.'\n].join('\\n');\n\nreturn [{\n  json: {\n    ...d,\n    request_body: {\n      model: 'claude-sonnet-4-6',\n      max_tokens: 8192,\n      system,\n      messages: [{ role: 'user', content: user }]\n    }\n  }\n}];"
       },
       "id": "step3-build-fix-request-node",
       "name": "Build Fix Request",
@@ -755,7 +755,7 @@
           "actionFields": [
             {
               "action": "insert",
-              "text": "=# Chapter {{ $json.chapter_number }} \u2014 Revised Draft (Pending Final Smoothing)\n\nSaved: {{ new Date().toISOString().split('T')[0] }}\n\n---\n\n{{ $json.revised_draft }}\n"
+              "text": "=# Chapter {{ $json.chapter_number }} — Revised Draft (Pending Final Smoothing)\n\nSaved: {{ new Date().toISOString().split('T')[0] }}\n\n---\n\n{{ $json.revised_draft }}\n"
             }
           ]
         }
@@ -848,7 +848,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const d = $('Capture Post-Fix Decision').first().json;\nconst system = 'Final smoothing pass only. Do not alter canon facts or plot outcomes.';\nconst user = [\n  'Revised draft:',\n  d.revised_draft,\n  '',\n  'Perform final smoothing for rhythm and readability only.'\n].join('\\n');\n\nreturn [{\n  json: {\n    ...d,\n    request_body: {\n      model: 'claude-sonnet-4-6',\n      max_tokens: 8192,\n      system,\n      messages: [{ role: 'user', content: user }]\n    }\n  }\n}];"
+        "jsCode": "const d = $('Capture Post-Fix Decision').first().json;\nconst prefs = (d.compressed_context_pack || {}).author_preferences || {};\n\nconst styleNotes = [];\nif (prefs.prose_register && prefs.prose_register.value) styleNotes.push('Register: ' + prefs.prose_register.value);\nif (prefs.style_preferences && prefs.style_preferences.value && prefs.style_preferences.value.length > 0) styleNotes.push('Style preferences: ' + prefs.style_preferences.value.join(', '));\nif (prefs.must_avoid && prefs.must_avoid.value && prefs.must_avoid.value.length > 0) styleNotes.push('Must avoid: ' + prefs.must_avoid.value.join(', '));\n\nconst system = [\n  'You are a final-pass prose polisher.',\n  '',\n  'Rules:',\n  '- Smooth rhythm and sentence flow. Vary sentence length.',\n  '- Remove any remaining AI-isms: \"couldn\\'t help but\", \"a tapestry of\", \"the weight of\", \"something shifted\".',\n  '- Tighten where verbose. Cut filler words (just, really, very, quite, seemed to).',\n  '- Ensure scene transitions read cleanly.',\n  '- Do NOT alter any canon facts, plot events, character actions, or dialogue meaning.',\n  '- Do NOT add new content or remove existing scenes.',\n  \"- Match the author's stated prose register and style preferences.\",\n  '- Return the complete polished chapter. Plain prose only, no metadata.'\n].join('\\n');\n\nconst user = [\n  'Revised draft:',\n  d.revised_draft,\n  '',\n  styleNotes.length > 0 ? 'Author style notes:\\n' + styleNotes.join('\\n') : '',\n  '',\n  d.post_fix_approval_notes ? 'Author notes from review: ' + d.post_fix_approval_notes : '',\n  '',\n  'Polish this chapter for rhythm and readability. Return the complete text.'\n].filter(Boolean).join('\\n');\n\nreturn [{\n  json: {\n    ...d,\n    request_body: {\n      model: 'claude-sonnet-4-6',\n      max_tokens: 8192,\n      system,\n      messages: [{ role: 'user', content: user }]\n    }\n  }\n}];"
       },
       "id": "step3-build-final-smoothing-request-node",
       "name": "Build Final Smoothing Request",
@@ -916,7 +916,7 @@
           "actionFields": [
             {
               "action": "insert",
-              "text": "=\n\n---\n\n# Chapter {{ $json.chapter_number }} \u2014 Final Draft\n\nSaved: {{ new Date().toISOString().split('T')[0] }}\n\n---\n\n{{ $json.final_draft }}\n"
+              "text": "=\n\n---\n\n# Chapter {{ $json.chapter_number }} — Final Draft\n\nSaved: {{ new Date().toISOString().split('T')[0] }}\n\n---\n\n{{ $json.final_draft }}\n"
             }
           ]
         }

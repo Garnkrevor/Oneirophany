@@ -55,38 +55,26 @@ if (!raw_input) {
   throw new Error('Validation failed: raw_input is empty or missing.');
 }
 
-return [{ json: { raw_input, round_label, input_type } }];
+if (!body.current_pack || typeof body.current_pack !== 'object') {
+  throw new Error(
+    'Validation failed: current_pack is missing or not an object. ' +
+    'On round 1, send the template pack JSON as current_pack. ' +
+    'On subsequent rounds, send the updated_pack returned by the previous round.'
+  );
+}
+
+return [{ json: { raw_input, round_label, input_type, current_pack: body.current_pack } }];
 `.trim(),
 
   loadCurrentPack: `
 const prev = $('Validate Input').first().json;
-
-const packPath = process.env.ONEIROPHANY_PACK_PATH || '/data/story_foundation_pack.json';
-const templatePath = process.env.ONEIROPHANY_TEMPLATE_PATH || '/data/story_foundation_pack.template.json';
-
-let current_pack;
-try {
-  const fsLib = require('fs');
-  if (fsLib.existsSync(packPath)) {
-    current_pack = JSON.parse(fsLib.readFileSync(packPath, 'utf-8'));
-  } else if (fsLib.existsSync(templatePath)) {
-    current_pack = JSON.parse(fsLib.readFileSync(templatePath, 'utf-8'));
-  } else {
-    throw new Error(
-      'Neither pack nor template found. ' +
-      'Set ONEIROPHANY_PACK_PATH and ONEIROPHANY_TEMPLATE_PATH environment variables.'
-    );
-  }
-} catch (err) {
-  throw new Error('Load Current Pack failed: ' + err.message);
-}
 
 return [{
   json: {
     raw_input: prev.raw_input,
     round_label: prev.round_label,
     input_type: prev.input_type,
-    current_pack
+    current_pack: prev.current_pack
   }
 }];
 `.trim(),
@@ -444,10 +432,6 @@ try {
   }];
 }
 
-const packPath    = process.env.ONEIROPHANY_PACK_PATH     || '/data/story_foundation_pack.json';
-const logPath     = process.env.ONEIROPHANY_LOG_PATH      || '/data/rounds/round_' + pack.version + '.json';
-const nextQPath   = process.env.ONEIROPHANY_NEXT_Q_PATH   || '/data/next_questions.json';
-
 const roundLog = {
   version: pack.version,
   timestamp: pack.last_modified,
@@ -456,31 +440,6 @@ const roundLog = {
   merge_report: report,
   next_questions
 };
-
-try {
-  const fsLib   = require('fs');
-  const pathLib = require('path');
-
-  // Ensure all output parent directories exist
-  const packDir  = pathLib.dirname(packPath);
-  const logDir   = pathLib.dirname(logPath);
-  const nextQDir = pathLib.dirname(nextQPath);
-  if (!fsLib.existsSync(packDir))  fsLib.mkdirSync(packDir,  { recursive: true });
-  if (!fsLib.existsSync(logDir))   fsLib.mkdirSync(logDir,   { recursive: true });
-  if (!fsLib.existsSync(nextQDir)) fsLib.mkdirSync(nextQDir, { recursive: true });
-
-  // Write master pack — only reached on successful parse + merge
-  fsLib.writeFileSync(packPath, JSON.stringify(pack, null, 2));
-
-  // Write round log
-  fsLib.writeFileSync(logPath, JSON.stringify(roundLog, null, 2));
-
-  // Write next questions (overwrite each round — ephemeral artifact)
-  fsLib.writeFileSync(nextQPath, JSON.stringify(next_questions, null, 2));
-
-} catch (err) {
-  throw new Error('Save Outputs failed: ' + err.message);
-}
 
 return [{
   json: {
@@ -491,14 +450,15 @@ return [{
     ready_for_drafting: pack.completeness_status.ready_for_drafting,
     blocking_issues: pack.completeness_status.blocking_issues,
     next_questions,
-    merge_report: report
+    merge_report: report,
+    updated_pack: pack,
+    round_log: roundLog
   }
 }];
 `.trim(),
 
   errorHandler: `
 const data = $input.first().json;
-const errorPath = process.env.ONEIROPHANY_ERROR_PATH || '/data/errors';
 
 const errorRecord = {
   timestamp: new Date().toISOString(),
@@ -506,23 +466,16 @@ const errorRecord = {
   raw_response: data.raw_response || null
 };
 
-try {
-  const fsLib = require('fs');
-  if (!fsLib.existsSync(errorPath)) fsLib.mkdirSync(errorPath, { recursive: true });
-  const filename = errorPath + '/error_' + Date.now() + '.json';
-  fsLib.writeFileSync(filename, JSON.stringify(errorRecord, null, 2));
-} catch (writeErr) {
-  console.error('Error Handler: could not write error file:', writeErr.message);
-  console.error('Error details:', JSON.stringify(errorRecord));
-}
-
-// Master pack is NOT written — this node is only reached on error path.
+// Master pack is NOT updated — this node is only reached on error path.
+// The full error record is returned to the caller for inspection.
 return [{
   json: {
+    success: false,
     halted: true,
     reason: 'Parse or validation failure — master pack was NOT updated.',
     error_message: data.error_message,
-    recovery: 'Check error log in ' + (process.env.ONEIROPHANY_ERROR_PATH || '/data/errors') + ' and retry with corrected input.'
+    error_record: errorRecord,
+    recovery: 'Inspect error_record.raw_response for the malformed AI output, then retry with corrected input.'
   }
 }];
 `.trim()

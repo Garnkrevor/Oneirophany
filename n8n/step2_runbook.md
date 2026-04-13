@@ -37,15 +37,8 @@ Set these in n8n's environment or in the `.env` file for your n8n instance.
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `ANTHROPIC_API_KEY` | Yes | — | Anthropic API key. Used in all three AI HTTP Request nodes. |
-| `ONEIROPHANY_PACK_PATH` | Yes | `/data/story_foundation_pack.json` | Path to the canonical pack JSON. Read and written by the workflow. |
-| `ONEIROPHANY_TEMPLATE_PATH` | Yes | `/data/story_foundation_pack.template.json` | Path to the blank template. Used when no pack exists yet. |
-| `ONEIROPHANY_LOG_PATH` | No | `/data/rounds/round_{version}.json` | Path pattern for round log files. `{version}` is replaced with the pack version number at runtime. |
-| `ONEIROPHANY_NEXT_Q_PATH` | No | `/data/next_questions.json` | Path for the next questions artifact. Overwritten each round. |
-| `ONEIROPHANY_ERROR_PATH` | No | `/data/errors` | Directory for error log files. Created automatically if missing. |
 
-**For development:** Set `ONEIROPHANY_PACK_PATH` to a local path like `/tmp/oneirophany/story_foundation_pack.json`.
-
-**For cloud n8n:** The file system nodes will not work. Replace `Load Current Pack` and `Save Outputs` Code nodes with Google Drive or S3 nodes. The merge logic (node 11, Merge Patches) does not need to change.
+**Note:** This workflow is fully cloud-compatible. It does not use the filesystem. The `current_pack` is sent in the webhook payload and the `updated_pack` is returned in the response. The caller manages storage (Google Drive, database, etc.).
 
 ---
 
@@ -61,7 +54,8 @@ The workflow expects a `POST` request to the webhook URL with a JSON body.
 {
   "raw_input": "string — the full text to process (chat transcript, voice transcript, notes, etc.)",
   "round_label": "string — human-readable label e.g. 'Pass 1 - Concept and premise'",
-  "input_type": "chat_transcript | voice_transcript | freeform_notes | answer_block"
+  "input_type": "chat_transcript | voice_transcript | freeform_notes | answer_block",
+  "current_pack": "object — the story_foundation_pack JSON. On round 1, send the template. On subsequent rounds, send the updated_pack from the previous response."
 }
 ```
 
@@ -71,7 +65,7 @@ The workflow expects a `POST` request to the webhook URL with a JSON body.
 - `round_label` missing → defaults to `"Unlabeled round"` (does not halt)
 - `input_type` not in allowed values → defaults to `"freeform_notes"` (does not halt)
 
-**Example valid request:**
+**Example valid request (round 1 — send template as current_pack):**
 
 ```bash
 curl -X POST https://your-n8n-instance/webhook/foundation-processor \
@@ -79,9 +73,29 @@ curl -X POST https://your-n8n-instance/webhook/foundation-processor \
   -d '{
     "raw_input": "It is definitely dark fantasy. The story is about a disgraced knight...",
     "round_label": "Pass 1 - Concept and premise",
-    "input_type": "chat_transcript"
+    "input_type": "chat_transcript",
+    "current_pack": { ... template JSON ... }
   }'
 ```
+
+**Response on success:**
+
+```json
+{
+  "success": true,
+  "version": 2,
+  "round_summary": "...",
+  "ready_for_outline": false,
+  "ready_for_drafting": false,
+  "blocking_issues": ["..."],
+  "next_questions": [{"question": "...", "section": "...", "why": "..."}],
+  "merge_report": {...},
+  "updated_pack": { ... the updated story_foundation_pack ... },
+  "round_log": { ... round log record ... }
+}
+```
+
+Save `updated_pack` and send it as `current_pack` in the next round.
 
 ---
 
@@ -107,16 +121,18 @@ Webhook
 
 ---
 
-## Storage rules
+## Storage rules (cloud-compatible)
 
-| File | Behavior |
-|------|---------|
-| `story_foundation_pack.json` | **Read** at start of every run. **Written only on success** (after Merge Patches). Never written on error path. |
-| `rounds/round_{version}.json` | New file created each run. Append-only log of round results. |
-| `next_questions.json` | Overwritten each run. Ephemeral artifact — the last round's questions. |
-| `errors/error_{timestamp}.json` | Created only on error path. Contains raw AI response and error message. |
+This workflow does not read or write files. All state flows through the webhook request/response cycle:
 
-**Non-negotiable:** The JSON file is the canonical master. Google Docs outputs (if used) are rendered from the JSON, never re-ingested as source.
+| Data | Where it lives | Behavior |
+|------|----------------|----------|
+| `story_foundation_pack` | Caller's storage (Google Drive, DB, etc.) | Sent as `current_pack` in request. Returned as `updated_pack` in response. Caller saves it. |
+| Round log | Response payload | Returned as `round_log` in the response. Caller stores it as desired. |
+| Next questions | Response payload | Returned as `next_questions` in the response. |
+| Error details | Response payload | On error, `error_record` contains the raw AI response and error message. |
+
+**Non-negotiable:** The JSON pack is the canonical master. Google Docs outputs (if used) are rendered from the JSON, never re-ingested as source.
 
 ---
 
@@ -199,27 +215,22 @@ The build script is the source of truth for the workflow structure. The generate
 
 ---
 
-## Replacing file system storage for cloud n8n
+## Cloud compatibility
 
-The `Load Current Pack` and `Save Outputs` Code nodes use `require('fs')` for local file access. This does not work in n8n cloud.
+This workflow is fully cloud-compatible out of the box. No filesystem access is used.
 
-**Replacement pattern:**
+- `current_pack` is sent by the caller in the webhook POST body
+- `updated_pack` is returned in the webhook response
+- The caller is responsible for persisting the pack between rounds (e.g., in Google Drive, a database, or local storage)
 
-1. Remove the `Load Current Pack` Code node
-2. Add a **Google Drive** node to read the pack JSON file
-3. Add a **Code node** after it to parse the JSON and pass `current_pack` downstream
-4. Remove the file-write lines from `Save Outputs`
-5. Add **Google Drive** update nodes at the end for pack, log, and next questions
-
-The `Merge Patches` node does not need to change — it only depends on `{ payload, current_pack }` from `Prepare Merge Input`.
+This design works on Hostinger n8n, n8n cloud, self-hosted n8n, or any n8n instance.
 
 ---
 
 ## Validation checklist before activating
 
-- [ ] `ANTHROPIC_API_KEY` set and valid
-- [ ] `ONEIROPHANY_PACK_PATH` points to a writable location
-- [ ] `ONEIROPHANY_TEMPLATE_PATH` points to the template JSON
-- [ ] Manual trigger test with fixture 01 data passes (check `ready_for_outline` = false, `version` = 2)
-- [ ] Manual trigger test with malformed JSON payload triggers error branch (check error log written, pack NOT updated)
+- [ ] `ANTHROPIC_API_KEY` environment variable set and valid in n8n
+- [ ] Manual trigger test with fixture 01 data + template pack as `current_pack` passes
+- [ ] Verify response includes `updated_pack` with `version: 2`
+- [ ] Manual trigger test with malformed JSON triggers error branch (response has `halted: true`, no `updated_pack`)
 - [ ] Webhook URL recorded and accessible from your interview environment
